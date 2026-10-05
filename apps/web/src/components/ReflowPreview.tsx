@@ -41,10 +41,13 @@ function BlockView({
   onSelect: (id: string) => void;
   selected: boolean;
 }) {
-  const selectedClass = selected ? "outline outline-1 outline-neutral-900" : "";
+  const selectedClass = selected
+    ? "rounded-small outline outline-1 outline-notion-blue bg-sky-tint/50"
+    : "";
   const note = integrityNote(block);
   const common =
-    "block cursor-pointer px-2 py-1 hover:bg-neutral-50 " + selectedClass;
+    "block cursor-pointer rounded-small px-2 py-1 hover:bg-paper-warmth " +
+    selectedClass;
 
   let body: React.ReactNode = null;
   switch (block.type) {
@@ -52,7 +55,14 @@ function BlockView({
       const level = Math.min(Math.max(block.level ?? 1, 1), 6);
       const Tag = `h${level}` as "h1";
       body = (
-        <Tag className={common} dir={block.dir} lang={block.lang} onClick={() => onSelect(block.id)}>
+        <Tag
+          className={
+            "font-notioninter font-semibold tracking-[-0.242px] " + common
+          }
+          dir={block.dir}
+          lang={block.lang}
+          onClick={() => onSelect(block.id)}
+        >
           {block.text}
         </Tag>
       );
@@ -79,8 +89,14 @@ function BlockView({
       break;
     case "footnote":
       body = (
-        <aside className={common} onClick={() => onSelect(block.id)}>
-          <p className="text-xs uppercase tracking-wide text-neutral-500">
+        <aside
+          className={
+            "rounded-small border-l-2 border-mocha bg-paper-warmth px-3 py-2 " +
+            common
+          }
+          onClick={() => onSelect(block.id)}
+        >
+          <p className="font-notioninter text-caption uppercase tracking-wide text-stone">
             Catatan kaki {block.marker}
           </p>
           {(block.blocks ?? []).map((inner) => (
@@ -97,20 +113,29 @@ function BlockView({
         <figure className={common} onClick={() => onSelect(block.id)}>
           {resource?.dataUrl ? (
             // eslint-disable-next-line @next/next/no-img-element
-            <img alt="" src={resource.dataUrl} />
+            <img alt="" className="rounded-small" src={resource.dataUrl} />
           ) : (
-            <p className="text-xs text-neutral-500">[gambar {block.resourceId}]</p>
+            <p className="font-notioninter text-xs text-stone">
+              [gambar {block.resourceId}]
+            </p>
           )}
-          {block.captionBlockId ? null : null}
         </figure>
       );
       break;
     }
     case "table":
-      body = <p className={common} onClick={() => onSelect(block.id)}>[tabel]</p>;
+      body = (
+        <p className={common} onClick={() => onSelect(block.id)}>
+          [tabel]
+        </p>
+      );
       break;
     case "list":
-      body = <p className={common} onClick={() => onSelect(block.id)}>[daftar]</p>;
+      body = (
+        <p className={common} onClick={() => onSelect(block.id)}>
+          [daftar]
+        </p>
+      );
       break;
     default:
       body = null;
@@ -120,7 +145,9 @@ function BlockView({
     <div className="relative">
       {body}
       {note ? (
-        <p className="mb-1 px-2 text-[11px] text-amber-700">{note}</p>
+        <p className="font-notioninter mb-1 px-2 text-[11px] text-vermillion">
+          {note}
+        </p>
       ) : null}
     </div>
   );
@@ -136,7 +163,7 @@ export function ReflowPreview({
   onSelect: (id: string) => void;
 }) {
   return (
-    <div className="reflow-preview max-h-[70vh] overflow-y-auto border border-neutral-200 p-6 text-[15px] leading-relaxed">
+    <div className="reflow-preview max-h-[70vh] overflow-y-auto rounded-card border border-black/8 bg-pure-white p-6 text-body leading-relaxed text-charcoal">
       {reflow.blocks.map((block) => (
         <BlockView
           block={block}

@@ -1,17 +1,80 @@
 @import "tailwindcss";
 
-/* Restrained document-tool typography (VIBE-CODING-INSTRUCTIONS.md, UI direction). */
+/*
+ * Notion-style theme (style reference: "warm paper notebook under afternoon sun").
+ * Warm canvas #f6f5f4, white cards with hairline borders (no shadows), a single
+ * chromatic action blue #0075de, flat fills only — no gradients.
+ */
+@theme {
+  /* Colors */
+  --color-notion-blue: #0075de;
+  --color-paper-warmth: #f6f5f4;
+  --color-pure-white: #ffffff;
+  --color-ink-black: #000000;
+  --color-charcoal: #111111;
+  --color-stone: #757575;
+  --color-graphite: #615d59;
+  --color-slate: #696969;
+  --color-sky-tint: #e6f3fe;
+  --color-marigold: #ffb110;
+  --color-coral: #f64932;
+  --color-saffron: #e89d01;
+  --color-vermillion: #e32d14;
+  --color-mocha: #b18164;
+  --color-signal-blue: #097fe8;
+  --color-sky-wash: #62aef0;
+  --color-midnight-ink: #02093a;
+  --color-peach: #f6d5b8;
+
+  /* Typography */
+  --font-notioninter: var(--font-inter), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, sans-serif;
+  --font-lyon-text: var(--font-lyon), Georgia, "Times New Roman", serif;
+  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system,
+    "Segoe UI", Roboto, sans-serif;
+
+  /* Type scale (with per-size leading/tracking) */
+  --text-caption: 12px;
+  --text-caption--line-height: 1.33;
+  --text-caption--letter-spacing: 0.12px;
+  --text-body-sm: 14px;
+  --text-body-sm--line-height: 1.43;
+  --text-body: 16px;
+  --text-body--line-height: 1.5;
+  --text-subheading: 20px;
+  --text-subheading--line-height: 1;
+  --text-heading-sm: 22px;
+  --text-heading-sm--line-height: 1.27;
+  --text-heading-sm--letter-spacing: -0.242px;
+  --text-heading: 40px;
+  --text-heading--line-height: 1.5;
+  --text-heading-lg: 48px;
+  --text-heading-lg--line-height: 1.5;
+  --text-display-sm: 54px;
+  --text-display-sm--line-height: 1.04;
+  --text-display-sm--letter-spacing: -1.89px;
+  --text-display: 72px;
+  --text-display--line-height: 1.21;
+  --text-display--letter-spacing: -2.016px;
+
+  /* Border radius: cards 12px, buttons 8px, pills 9999px, small 4px */
+  --radius-small: 4px;
+  --radius-button: 8px;
+  --radius-card: 12px;
+  --radius-pill: 9999px;
+}
+
 :root {
   color-scheme: light;
 }
 
 body {
-  @apply bg-white text-neutral-900 antialiased;
+  @apply bg-paper-warmth font-notioninter text-ink-black antialiased;
 }
 
-/* Reflow preview: book-like reading surface, RTL slightly larger. */
+/* Reflow preview: editorial serif reading surface (Lyon role), RTL larger. */
 .reflow-preview {
-  font-family: Georgia, "Times New Roman", serif;
+  font-family: var(--font-lyon-text);
 }
 
 .reflow-preview [dir="rtl"] {

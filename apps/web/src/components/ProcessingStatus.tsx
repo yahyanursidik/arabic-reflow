@@ -2,7 +2,7 @@
 
 import { useState } from "react";
 
-import { Job } from "@/lib/contract";
+import { Job, UiReflow } from "@/lib/contract";
 
 const STAGE_LABELS: Record<string, string> = {
   uploaded: "Diunggah",
@@ -22,31 +22,40 @@ const STAGE_LABELS: Record<string, string> = {
 
 export function ProcessingStatus({
   job,
+  hasResults,
   onConvert,
 }: {
   job: Job | null;
+  hasResults: boolean;
   onConvert: (ocr: boolean) => void;
 }) {
   const [ocr, setOcr] = useState(false);
   const active = job?.status === "queued" || job?.status === "processing";
+  // Single chromatic action per screen: conversion is primary before results
+  // exist; once results are in, re-conversion becomes the ghost alternative.
+  const primary = !hasResults;
 
   return (
-    <section className="border border-neutral-200 p-4 text-sm">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+    <section className="rounded-card border border-black/8 bg-pure-white p-6 text-sm">
+      <h2 className="text-caption font-semibold uppercase tracking-wide text-stone">
         Konversi
       </h2>
 
       {!job || job.status === "completed" ? (
-        <div className="mt-3 flex flex-wrap items-center gap-3">
+        <div className="mt-4 flex flex-wrap items-center gap-3">
           <button
-            className="border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white disabled:opacity-40"
+            className={
+              primary
+                ? "rounded-button bg-notion-blue px-4 py-2 text-sm font-medium text-pure-white hover:opacity-90 disabled:opacity-40"
+                : "rounded-button bg-sky-tint px-4 py-2 text-sm font-medium text-notion-blue hover:opacity-80 disabled:opacity-40"
+            }
             disabled={active}
             onClick={() => onConvert(ocr)}
             type="button"
           >
             {job?.status === "completed" ? "Konversi ulang" : "Mulai konversi"}
           </button>
-          <label className="flex items-center gap-2 text-neutral-700">
+          <label className="flex items-center gap-2 text-graphite">
             <input
               checked={ocr}
               onChange={(event) => setOcr(event.target.checked)}
@@ -58,13 +67,13 @@ export function ProcessingStatus({
       ) : null}
 
       {active ? (
-        <div className="mt-3">
-          <p className="text-neutral-700">
+        <div className="mt-4">
+          <p className="text-graphite">
             {STAGE_LABELS[job.stage] ?? job.stage} — {job.progress}%
           </p>
-          <div className="mt-1 h-1 w-full bg-neutral-200">
+          <div className="mt-1.5 h-1 w-full rounded-pill bg-black/10">
             <div
-              className="h-1 bg-neutral-900"
+              className="h-1 rounded-pill bg-notion-blue"
               style={{ width: `${job.progress}%` }}
             />
           </div>
@@ -72,13 +81,13 @@ export function ProcessingStatus({
       ) : null}
 
       {job?.status === "failed" ? (
-        <p className="mt-3 border-l-2 border-red-600 pl-3 text-red-700">
+        <p className="mt-4 rounded-small border-l-2 border-coral bg-paper-warmth px-3 py-2 text-vermillion">
           Konversi gagal: {job.error ?? "penyebab tidak diketahui"}
         </p>
       ) : null}
 
       {job?.status === "completed" ? (
-        <p className="mt-3 text-neutral-600">
+        <p className="mt-4 text-graphite">
           Selesai — {job.warnings.length} peringatan. Periksa pratinjau dan
           blok bermasalah sebelum mengekspor.
         </p>
@@ -86,3 +95,5 @@ export function ProcessingStatus({
     </section>
   );
 }
+
+export type { UiReflow };

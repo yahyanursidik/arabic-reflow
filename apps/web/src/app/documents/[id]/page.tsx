@@ -128,8 +128,13 @@ export default function DocumentWorkspace() {
   if (loadError) {
     return (
       <main className="mx-auto max-w-2xl px-6 py-24">
-        <p className="border-l-2 border-red-600 pl-3 text-red-700">{loadError}</p>
-        <a className="mt-4 inline-block text-sm underline" href="/">
+        <p className="rounded-card border border-black/8 bg-pure-white p-4 text-vermillion">
+          {loadError}
+        </p>
+        <a
+          className="mt-4 inline-block rounded-button px-2 py-1 text-sm text-ink-black/60 hover:text-ink-black"
+          href="/"
+        >
           ← kembali ke unggahan
         </a>
       </main>
@@ -142,35 +147,38 @@ export default function DocumentWorkspace() {
     <main className="mx-auto max-w-7xl px-6 py-10">
       <header className="flex flex-wrap items-baseline justify-between gap-2">
         <div>
-          <h1 className="text-xl font-semibold tracking-tight">
+          <h1 className="text-heading-sm font-semibold text-ink-black">
             {meta?.filename ?? "…"}
           </h1>
-          <p className="text-xs text-neutral-500">
+          <p className="text-caption text-stone">
             {meta ? `${Math.round(meta.size / 1024)} KB · ${meta.id.slice(0, 8)}` : ""}
           </p>
         </div>
-        <a className="text-sm underline" href="/">
+        <a
+          className="rounded-button px-2 py-1 text-sm text-ink-black/60 hover:text-ink-black"
+          href="/"
+        >
           ← dokumen lain
         </a>
       </header>
 
       {error ? (
-        <p className="mt-4 border-l-2 border-red-600 pl-3 text-sm text-red-700">
+        <p className="mt-4 rounded-small border-l-2 border-coral bg-pure-white px-3 py-2 text-sm text-vermillion">
           {error}
         </p>
       ) : null}
 
       <div className="mt-6 grid gap-4 md:grid-cols-2">
-        {profile ? <AnalysisSummary profile={profile} /> : (
-          <section className="border border-neutral-200 p-4 text-sm">
-            <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+        {profile ? (
+          <AnalysisSummary profile={profile} />
+        ) : (
+          <section className="rounded-card border border-black/8 bg-pure-white p-6 text-sm">
+            <h2 className="text-caption font-semibold uppercase tracking-wide text-stone">
               Ringkasan analisis
             </h2>
-            <p className="mt-2 text-neutral-600">
-              Dokumen belum dianalisis.
-            </p>
+            <p className="mt-2 text-graphite">Dokumen belum dianalisis.</p>
             <button
-              className="mt-3 border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white"
+              className="mt-4 rounded-button bg-sky-tint px-4 py-2 text-sm font-medium text-notion-blue hover:opacity-80"
               onClick={() => void runAnalyze()}
               type="button"
             >
@@ -178,26 +186,30 @@ export default function DocumentWorkspace() {
             </button>
           </section>
         )}
-        <ProcessingStatus job={job} onConvert={(ocr) => void runConvert(ocr)} />
+        <ProcessingStatus
+          hasResults={reflow !== null}
+          job={job}
+          onConvert={(ocr) => void runConvert(ocr)}
+        />
       </div>
 
       {reflow ? (
         <>
-          <div className="mt-4 flex flex-wrap items-center justify-between gap-2">
-            <h2 className="text-sm font-semibold text-neutral-900">
+          <div className="mt-8 flex flex-wrap items-center justify-between gap-2">
+            <h2 className="text-heading-sm font-semibold text-ink-black">
               Review: sumber · pratinjau · inspektur
             </h2>
             <ExportPanel report={report} />
           </div>
-          <div className="mt-2 grid gap-4 lg:grid-cols-3">
+          <div className="mt-4 grid gap-4 lg:grid-cols-3">
             <section className="text-sm">
               <div className="flex items-center gap-2">
-                <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+                <h3 className="text-caption font-semibold uppercase tracking-wide text-stone">
                   Sumber
                 </h3>
                 {profile && profile.pageCount > 1 ? (
                   <select
-                    className="border border-neutral-300 p-0.5 text-xs"
+                    className="rounded-button border border-black/15 p-0.5 text-xs"
                     onChange={(event) => setPage(Number(event.target.value))}
                     value={page}
                   >
@@ -212,12 +224,12 @@ export default function DocumentWorkspace() {
               {/* eslint-disable-next-line @next/next/no-img-element */}
               <img
                 alt={`Halaman ${page} dokumen sumber`}
-                className="mt-1 w-full border border-neutral-200"
+                className="mt-1 w-full rounded-card border border-black/8 bg-pure-white"
                 src={api.sourcePageUrl(documentId, page)}
               />
             </section>
             <section>
-              <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+              <h3 className="text-caption font-semibold uppercase tracking-wide text-stone">
                 Pratinjau reflow
               </h3>
               <div className="mt-1">
@@ -243,7 +255,7 @@ export default function DocumentWorkspace() {
       ) : null}
 
       {converting ? null : !reflow && job?.status !== "failed" ? (
-        <p className="mt-4 text-sm text-neutral-500">
+        <p className="mt-4 text-sm text-stone">
           Jalankan konversi untuk melihat pratinjau reflow.
         </p>
       ) : null}

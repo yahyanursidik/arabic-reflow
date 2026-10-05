@@ -8,34 +8,34 @@ function yesNo(value: boolean): string {
 
 export function AnalysisSummary({ profile }: { profile: Profile }) {
   return (
-    <section className="border border-neutral-200 p-4 text-sm">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+    <section className="rounded-card border border-black/8 bg-pure-white p-6 text-sm">
+      <h2 className="text-caption font-semibold uppercase tracking-wide text-stone">
         Ringkasan analisis
       </h2>
-      <dl className="mt-3 grid grid-cols-2 gap-x-6 gap-y-1 md:grid-cols-4">
+      <dl className="mt-4 grid grid-cols-2 gap-x-6 gap-y-2 md:grid-cols-4">
         <div>
-          <dt className="text-neutral-500">Halaman</dt>
-          <dd className="font-medium">{profile.pageCount}</dd>
+          <dt className="text-stone">Halaman</dt>
+          <dd className="font-medium text-ink-black">{profile.pageCount}</dd>
         </div>
         <div>
-          <dt className="text-neutral-500">Klasifikasi</dt>
-          <dd className="font-medium">
+          <dt className="text-stone">Klasifikasi</dt>
+          <dd className="font-medium text-ink-black">
             {profile.classification}
-            <span className="ml-1 font-normal text-neutral-500">
+            <span className="ml-1 font-normal text-stone">
               ({Math.round(profile.classificationConfidence * 100)}%)
             </span>
           </dd>
         </div>
         <div>
-          <dt className="text-neutral-500">Lapisan teks</dt>
-          <dd className="font-medium">{yesNo(profile.textLayer)}</dd>
+          <dt className="text-stone">Lapisan teks</dt>
+          <dd className="font-medium text-ink-black">{yesNo(profile.textLayer)}</dd>
         </div>
         <div>
-          <dt className="text-neutral-500">Terdeteksi Arab</dt>
-          <dd className="font-medium">{yesNo(profile.arabicDetected)}</dd>
+          <dt className="text-stone">Terdeteksi Arab</dt>
+          <dd className="font-medium text-ink-black">{yesNo(profile.arabicDetected)}</dd>
         </div>
       </dl>
-      <ul className="mt-3 space-y-0.5 text-xs text-neutral-600">
+      <ul className="mt-4 space-y-1 text-xs text-graphite">
         {profile.scannedPages.length > 0 ? (
           <li>
             Halaman seperti hasil pindai: {profile.scannedPages.join(", ")} —

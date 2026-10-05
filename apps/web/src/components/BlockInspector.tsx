@@ -33,8 +33,7 @@ function matches(block: UiBlock, filter: Filter): boolean {
     case "reading-order":
       return block.warnings.some((w) => w.includes("READING_ORDER"));
     case "ocr":
-      return block.text.includes("OcrSynthesized") ||
-        block.warnings.some((w) => w.includes("OCR"));
+      return block.warnings.some((w) => w.includes("OCR"));
     case "footnotes":
       return block.type === "footnote";
     case "edited":
@@ -105,19 +104,19 @@ export function BlockInspector({
   const lowConfidence = new Set(report?.integrity?.lowConfidenceBlockIds ?? []);
 
   return (
-    <div className="flex max-h-[70vh] flex-col border border-neutral-200 text-sm">
-      <div className="border-b border-neutral-200 p-3">
-        <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+    <div className="flex max-h-[70vh] flex-col rounded-card border border-black/8 bg-pure-white text-sm">
+      <div className="border-b border-black/8 p-4">
+        <h2 className="text-caption font-semibold uppercase tracking-wide text-stone">
           Inspektur blok
         </h2>
-        <div className="mt-2 flex flex-wrap gap-1">
+        <div className="mt-3 flex flex-wrap gap-1.5">
           {FILTERS.map((option) => (
             <button
               className={
-                "border px-2 py-0.5 text-xs " +
+                "rounded-pill px-2.5 py-0.5 text-xs font-medium " +
                 (filter === option.id
-                  ? "border-neutral-900 bg-neutral-900 text-white"
-                  : "border-neutral-300 text-neutral-700 hover:bg-neutral-50")
+                  ? "bg-notion-blue text-pure-white"
+                  : "bg-paper-warmth text-ink-black/90 hover:bg-sky-tint hover:text-notion-blue")
               }
               key={option.id}
               onClick={() => setFilter(option.id)}
@@ -129,23 +128,27 @@ export function BlockInspector({
         </div>
       </div>
 
-      <ul className="max-h-56 overflow-y-auto border-b border-neutral-200">
+      <ul className="max-h-56 overflow-y-auto border-b border-black/8">
         {visible.map((block) => (
           <li key={block.id}>
             <button
               className={
-                "flex w-full items-baseline justify-between gap-2 px-3 py-1.5 text-left hover:bg-neutral-50 " +
-                (selectedId === block.id ? "bg-neutral-100" : "")
+                "flex w-full items-baseline justify-between gap-2 px-4 py-1.5 text-left hover:bg-paper-warmth " +
+                (selectedId === block.id ? "bg-sky-tint/60" : "")
               }
               onClick={() => select(block)}
               type="button"
             >
-              <span className="truncate">
-                {lowConfidence.has(block.id) ? "[!] " : ""}
-                {block.modifiedByUser ? "[disunting] " : ""}
+              <span className="truncate text-ink-black/95">
+                {lowConfidence.has(block.id) ? (
+                  <span className="text-vermillion">[!] </span>
+                ) : null}
+                {block.modifiedByUser ? (
+                  <span className="text-notion-blue">[disunting] </span>
+                ) : null}
                 {block.text.slice(0, 60) || `[${block.type}]`}
               </span>
-              <span className="shrink-0 text-xs text-neutral-500">
+              <span className="shrink-0 text-xs text-stone">
                 {block.type}
                 {block.page ? ` · hlm ${block.page}` : ""}
               </span>
@@ -153,54 +156,56 @@ export function BlockInspector({
           </li>
         ))}
         {visible.length === 0 ? (
-          <li className="px-3 py-2 text-neutral-500">Tidak ada blok pada filter ini.</li>
+          <li className="px-4 py-2 text-stone">Tidak ada blok pada filter ini.</li>
         ) : null}
       </ul>
 
       {selected ? (
-        <div className="space-y-3 overflow-y-auto p-3">
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-neutral-600">
+        <div className="space-y-3 overflow-y-auto p-4">
+          <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-stone">
             <div>
-              <dt className="inline text-neutral-500">ID </dt>
-              <dd className="inline font-mono">{selected.id}</dd>
+              <dt className="inline">ID </dt>
+              <dd className="inline font-medium text-ink-black/90">{selected.id}</dd>
             </div>
             <div>
-              <dt className="inline text-neutral-500">Tipe </dt>
-              <dd className="inline">{selected.type}</dd>
+              <dt className="inline">Tipe </dt>
+              <dd className="inline font-medium text-ink-black/90">{selected.type}</dd>
             </div>
             <div>
-              <dt className="inline text-neutral-500">Bahasa </dt>
-              <dd className="inline">{selected.lang ?? "-"}</dd>
+              <dt className="inline">Bahasa </dt>
+              <dd className="inline font-medium text-ink-black/90">{selected.lang ?? "-"}</dd>
             </div>
             <div>
-              <dt className="inline text-neutral-500">Arah </dt>
-              <dd className="inline">{selected.dir ?? "-"}</dd>
+              <dt className="inline">Arah </dt>
+              <dd className="inline font-medium text-ink-black/90">{selected.dir ?? "-"}</dd>
             </div>
             <div>
-              <dt className="inline text-neutral-500">Confidence </dt>
-              <dd className="inline">
+              <dt className="inline">Confidence </dt>
+              <dd className="inline font-medium text-ink-black/90">
                 {selected.confidence !== undefined
                   ? `${Math.round(selected.confidence * 100)}%`
                   : "-"}
               </dd>
             </div>
             <div>
-              <dt className="inline text-neutral-500">Halaman </dt>
-              <dd className="inline">{selected.page ?? "-"}</dd>
+              <dt className="inline">Halaman </dt>
+              <dd className="inline font-medium text-ink-black/90">{selected.page ?? "-"}</dd>
             </div>
           </dl>
 
           {selected.warnings.length > 0 ? (
-            <p className="text-xs text-amber-700">{selected.warnings.join(", ")}</p>
+            <p className="rounded-small bg-paper-warmth px-2 py-1 text-xs text-vermillion">
+              {selected.warnings.join(", ")}
+            </p>
           ) : null}
 
           {["paragraph", "heading", "quote"].includes(selected.type) ? (
             <div className="space-y-2">
-              <label className="block text-xs text-neutral-500" htmlFor="block-text">
+              <label className="block text-xs text-stone" htmlFor="block-text">
                 Teks (perubahan ditandai sebagai suntingan pengguna)
               </label>
               <textarea
-                className="w-full border border-neutral-300 p-2 text-sm"
+                className="w-full rounded-button border border-black/15 p-2 text-sm text-ink-black focus:border-notion-blue focus:outline-none"
                 id="block-text"
                 onChange={(event) => setDraftText(event.target.value)}
                 rows={4}
@@ -208,14 +213,14 @@ export function BlockInspector({
               />
               <div className="flex gap-2">
                 <input
-                  className="w-24 border border-neutral-300 p-1 text-xs"
+                  className="w-24 rounded-button border border-black/15 p-1 text-xs focus:border-notion-blue focus:outline-none"
                   id="block-lang"
                   onChange={(event) => setDraftLang(event.target.value)}
                   placeholder="lang"
                   value={draftLang ?? ""}
                 />
                 <select
-                  className="border border-neutral-300 p-1 text-xs"
+                  className="rounded-button border border-black/15 p-1 text-xs text-ink-black focus:border-notion-blue focus:outline-none"
                   onChange={(event) => setDraftDir(event.target.value)}
                   value={draftDir ?? ""}
                 >
@@ -224,7 +229,7 @@ export function BlockInspector({
                   <option value="rtl">rtl</option>
                 </select>
                 <button
-                  className="ml-auto border border-neutral-900 bg-neutral-900 px-3 py-1 text-xs font-medium text-white disabled:opacity-40"
+                  className="ml-auto rounded-button bg-notion-blue px-3 py-1 text-xs font-medium text-pure-white hover:opacity-90 disabled:opacity-40"
                   disabled={saving}
                   onClick={() => void save()}
                   type="button"
@@ -232,25 +237,39 @@ export function BlockInspector({
                   {saving ? "Menyimpan…" : "Simpan"}
                 </button>
               </div>
-              {error ? <p className="text-xs text-red-700">{error}</p> : null}
+              {error ? (
+                <p className="rounded-small border-l-2 border-coral pl-2 text-xs text-vermillion">
+                  {error}
+                </p>
+              ) : null}
             </div>
           ) : null}
         </div>
       ) : (
-        <p className="p-3 text-neutral-500">
+        <p className="p-4 text-graphite">
           Pilih blok dari pratinjau atau daftar untuk memeriksa detail.
         </p>
       )}
 
       {report?.warnings.length ? (
-        <div className="border-t border-neutral-200 p-3">
-          <h3 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+        <div className="border-t border-black/8 p-4">
+          <h3 className="text-caption font-semibold uppercase tracking-wide text-stone">
             Peringatan dokumen
           </h3>
-          <ul className="mt-1 space-y-0.5 text-xs text-neutral-600">
+          <ul className="mt-1 space-y-0.5 text-xs text-graphite">
             {report.warnings.map((warning, index) => (
               <li key={index}>
-                [{warning.code}]
+                <span
+                  className={
+                    warning.severity === "error"
+                      ? "font-medium text-vermillion"
+                      : warning.severity === "warning"
+                        ? "text-saffron"
+                        : "text-stone"
+                  }
+                >
+                  [{warning.code}]
+                </span>
                 {warning.page ? ` (hlm ${warning.page})` : ""} {warning.message}
               </li>
             ))}

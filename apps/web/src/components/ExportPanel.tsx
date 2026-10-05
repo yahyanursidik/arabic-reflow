@@ -27,21 +27,21 @@ export function ExportPanel({ report }: { report: UiReport | null }) {
   }
 
   return (
-    <section className="border border-neutral-200 p-4 text-sm">
-      <h2 className="text-xs font-semibold uppercase tracking-wide text-neutral-500">
+    <section className="rounded-card border border-black/8 bg-pure-white p-6 text-sm">
+      <h2 className="text-caption font-semibold uppercase tracking-wide text-stone">
         Ekspor
       </h2>
-      <p className="mt-2 text-neutral-700">
+      <p className="mt-2 text-graphite">
         EPUB 3 divalidasi sebelum diunduh. Suntingan Anda pada blok ikut
         dalam paket.
       </p>
       {blocking.length > 0 ? (
-        <p className="mt-2 border-l-2 border-red-600 pl-3 text-red-700">
+        <p className="mt-2 rounded-small border-l-2 border-coral bg-paper-warmth px-3 py-2 text-vermillion">
           {blocking.length} peringatan berat — periksa sebelum mengekspor.
         </p>
       ) : null}
       <button
-        className="mt-3 border border-neutral-900 bg-neutral-900 px-3 py-1.5 text-sm font-medium text-white"
+        className="mt-4 rounded-button bg-notion-blue px-4 py-2 text-sm font-medium text-pure-white hover:opacity-90"
         onClick={() => void download()}
         type="button"
       >
