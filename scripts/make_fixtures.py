@@ -220,6 +220,32 @@ def fixture_arabic_numbers(w: FixtureWriter) -> pymupdf.Document:
     return doc
 
 
+def _render_figure(width: float, height: float) -> bytes:
+    """Render a simple vector figure to PNG for the image-caption fixture."""
+    tmp = pymupdf.open()
+    page = tmp.new_page(width=width, height=height)
+    page.draw_rect(pymupdf.Rect(10, 10, width - 10, height - 10),
+                   color=(0.1, 0.3, 0.6), fill=(0.85, 0.9, 1.0))
+    page.draw_circle((width / 2, height / 2), 40,
+                     color=(0.8, 0.2, 0.2), fill=(1, 0.9, 0.9))
+    page.insert_text((30, 30), "Reflow", fontsize=12)
+    png = page.get_pixmap(dpi=150).tobytes("png")
+    tmp.close()
+    return png
+
+
+def fixture_image_caption(w: FixtureWriter) -> pymupdf.Document:
+    doc = pymupdf.open()
+    page = _page(doc)
+    w.insert(page, pymupdf.Rect(60, 60, 535, 100),
+             "Gambar dan Keterangan", size=16, bold=True)
+    w.insert(page, pymupdf.Rect(60, 110, 535, 200), INDONESIAN_BODY, size=11)
+    page.insert_image(pymupdf.Rect(140, 220, 440, 400), stream=_render_figure(300, 180))
+    w.insert(page, pymupdf.Rect(140, 410, 440, 435),
+             "Gambar 1: Diagram alir rekonstruksi dokumen.", size=9)
+    return doc
+
+
 def fixture_footnotes(w: FixtureWriter) -> pymupdf.Document:
     doc = pymupdf.open()
     page = _page(doc)
@@ -303,6 +329,11 @@ FIXTURES: dict[str, tuple[callable, callable]] = {
         fixture_footnotes,
         lambda t: ([] if all(n in t for n in ("al-Bukhari", "Muslim ibn al-Hajjaj"))
                    else ["footnote text missing"]),
+    ),
+    "image-caption.pdf": (
+        fixture_image_caption,
+        lambda t: ([] if "Gambar 1: Diagram alir rekonstruksi dokumen." in t
+                   else ["caption text missing"]),
     ),
 }
 

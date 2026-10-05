@@ -88,6 +88,17 @@ def render_epub(
     )
     book.add_item(stylesheet)
 
+    for resource in document.resources:
+        if resource.kind == "image" and resource.content:
+            book.add_item(
+                epub.EpubItem(
+                    uid=resource.id,
+                    file_name=f"resources/{resource.filename or resource.id}",
+                    media_type=resource.media_type or "application/octet-stream",
+                    content=resource.content,
+                )
+            )
+
     if embed_arabic_font is None:
         embed_arabic_font = _document_has_arabic(document)
     if embed_arabic_font:

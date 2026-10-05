@@ -50,8 +50,9 @@ def extract_page(page: pymupdf.Page, page_number: int) -> RawPage:
             bbox=tuple(info["bbox"]),  # type: ignore[arg-type]
             width=int(info["width"]),
             height=int(info["height"]),
+            xref=int(info.get("xref") or 0),
         )
-        for info in page.get_image_info()
+        for info in page.get_image_info(xrefs=True)
     ]
 
     return RawPage(
@@ -75,6 +76,7 @@ def extract(source: str | bytes) -> RawDocument:
         if doc.needs_pass:
             raise ValueError("PDF is encrypted; refuse to extract without a password")
         pages = [extract_page(doc.load_page(i), i + 1) for i in range(doc.page_count)]
+        _attach_image_contents(doc, pages)
         return RawDocument(
             page_count=len(pages),
             pages=pages,
@@ -84,3 +86,17 @@ def extract(source: str | bytes) -> RawDocument:
         )
     finally:
         doc.close()
+
+
+def _attach_image_contents(doc: pymupdf.Document, pages: list[RawPage]) -> None:
+    """Pull encoded image bytes from the PDF into the raw model (M6-05)."""
+    for page in pages:
+        for image in page.images:
+            if not image.xref:
+                continue
+            try:
+                info = doc.extract_image(image.xref)
+            except Exception:
+                continue
+            image.content = info["image"]
+            image.media_type = f"image/{info['ext']}".replace("jpg", "jpeg")

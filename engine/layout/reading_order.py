@@ -16,7 +16,7 @@ from __future__ import annotations
 
 from engine.arabic.detector import classify_block
 from engine.extraction.models import RawBlock, RawDocument
-from engine.layout.columns import find_gutter
+from engine.layout.columns import find_gutters
 from engine.layout.models import LayoutReport, OrderReport
 from engine.reflowdoc.models import Direction
 
@@ -49,39 +49,46 @@ def _row_order(blocks: list[RawBlock], rtl: bool) -> list[RawBlock]:
     return result
 
 
-def _column_order(blocks: list[RawBlock], gutter: float) -> list[RawBlock]:
-    """Order left column, right column, keeping full-width blocks in place."""
-    left: list[RawBlock] = []
-    right: list[RawBlock] = []
+def _column_order(
+    blocks: list[RawBlock], gutters: list[float], page_width: float
+) -> list[RawBlock]:
+    """Order blocks column by column, keeping full-width blocks in place.
+
+    Gutters partition the page into N+1 column regions. Blocks lying fully
+    inside one region read top-to-bottom; regions read left-to-right (in
+    logical order — RTL column layouts remain a known limitation, see
+    docs/reconstruction.md). Blocks crossing any gutter are section
+    separators and stay at their vertical position.
+    """
+    boundaries = [float("-inf")] + list(gutters) + [float("inf")]
+    columns: list[list[RawBlock]] = [[] for _ in range(len(boundaries) - 1)]
     full: list[RawBlock] = []
+
     for block in blocks:
-        if block.bbox[0] > gutter + COLUMN_TOLERANCE:
-            right.append(block)
-        elif block.bbox[2] < gutter - COLUMN_TOLERANCE:
-            left.append(block)
-        else:
+        placed = False
+        for i in range(len(columns)):
+            left = boundaries[i] + COLUMN_TOLERANCE
+            right = boundaries[i + 1] - COLUMN_TOLERANCE
+            if block.bbox[0] > left and block.bbox[2] < right:
+                columns[i].append(block)
+                placed = True
+                break
+        if not placed:
             full.append(block)
-    left.sort(key=lambda b: b.bbox[1])
-    right.sort(key=lambda b: b.bbox[1])
+
+    for column in columns:
+        column.sort(key=lambda b: b.bbox[1])
     full.sort(key=lambda b: b.bbox[1])
 
     segment_tops = [float("-inf")] + [f.bbox[3] for f in full]
     segment_bottoms = [f.bbox[1] for f in full] + [float("inf")]
-    segments_left = [
-        [b for b in left if b.bbox[1] >= segment_tops[i] and b.bbox[3] <= segment_bottoms[i]]
-        for i in range(len(full) + 1)
-    ]
-    segments_right = [
-        [b for b in right if b.bbox[1] >= segment_tops[i] and b.bbox[3] <= segment_bottoms[i]]
-        for i in range(len(full) + 1)
-    ]
-
     result: list[RawBlock] = []
-    for i in range(len(full) + 1):
-        result.extend(segments_left[i])
-        result.extend(segments_right[i])
-        if i < len(full):
-            result.append(full[i])
+    for segment in range(len(full) + 1):
+        top, bottom = segment_tops[segment], segment_bottoms[segment]
+        for column in columns:
+            result.extend(b for b in column if b.bbox[1] >= top and b.bbox[3] <= bottom)
+        if segment < len(full):
+            result.append(full[segment])
     return result
 
 
@@ -107,11 +114,11 @@ def reconstruct_reading_order(
     new_pages = []
     for page in raw.pages:
         text_blocks = [b for b in page.blocks if b.type == "text" and b.text.strip()]
-        gutter = find_gutter([b.bbox for b in page.blocks], page.width)
-        if gutter is not None and len(text_blocks) >= 4:
-            ordered = _column_order(text_blocks, gutter)
-            page_confidence = 0.85
-            gutters[page.page] = round(gutter, 1)
+        gutters = find_gutters([b.bbox for b in page.blocks], 0.0, page.width)
+        if gutters and len(text_blocks) >= 4:
+            ordered = _column_order(text_blocks, gutters, page.width)
+            page_confidence = 0.85 if len(gutters) == 1 else 0.8
+            gutters_record = [round(g, 1) for g in gutters]
         else:
             ordered = _row_order(text_blocks, _page_is_rtl(text_blocks))
             page_confidence = 0.95
@@ -119,12 +126,14 @@ def reconstruct_reading_order(
                 # Analyzer sees column structure we could not establish.
                 uncertain_pages.append(page.page)
                 page_confidence = 0.5
+            gutters_record = []
         confidence[page.page] = page_confidence
+        if gutters_record and layout is not None:
+            layout.gutters[page.page] = gutters_record[0]
+            layout.all_gutters[page.page] = gutters_record
         new_pages.append(page.model_copy(update={"blocks": ordered}))
 
     report = OrderReport(
         uncertain_pages=uncertain_pages, confidence=confidence
     )
-    if layout is not None:
-        layout.gutters.update(gutters)
     return raw.model_copy(update={"pages": new_pages}), report

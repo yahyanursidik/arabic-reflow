@@ -99,12 +99,33 @@ diffs stay stable.
 
 ## Known limits (deferred)
 
-- Quote/list/table detection is not in Milestone 2; such content falls back
-  to paragraphs.
+- Quote detection is not implemented; such content falls back to paragraphs.
 - No page_break blocks: ReflowDoc is a flow document; page provenance lives
   in each block's `source.page` and the furniture report.
-- Column handling is a two-column gutter model; real multi-column layouts
-  (3+, spanning figures) arrive with M6.
+- Column handling supports N gutters via recursive splitting (M6-01), but
+  column regions always read left-to-right even on RTL pages — RTL
+  multi-column ordering is a known limitation for M6 refinement.
+- Footnote *detection* is heuristic zoning (bottom quarter, small font,
+  numbered marker) and emits `FOOTNOTE_UNCERTAIN`; body-text marker linking
+  (noterefs) is not implemented yet (M6-04 refinement).
+- Table detection (M6-06, P2) is not implemented; table-like content falls
+  back to paragraphs.
 - Arabic page numbers in decorated forms (e.g. `١٤٤٧` alone in a band) are
   removed by the digit rule only when they parse via the Arabic-Indic
   translation; complex decorations may survive into paragraphs.
+
+## Milestone 6 additions
+
+- **N-column reading order** (`engine/layout/columns.find_gutters` +
+  `_column_order`): recursive gutter detection per region, columns read
+  left-to-right between full-width section separators; confidence 0.8 for
+  multi-gutter pages.
+- **Footnotes** (`engine/layout/footnotes.py`): bottom-quarter small-font
+  numbered blocks become `FootnoteBlock(marker=…)` with an inner paragraph;
+  EPUB renders them as `aside epub:type="footnote"`.
+- **Images and captions** (`engine/layout/captions.py`): figure-sized images
+  become `ImageBlock` + binary `Resource` (base64 in JSON); captions
+  (below-image, overlapping, caption-word or small-font) are linked via
+  `caption_block_id`; full-page rasters are treated as scans and skipped
+  (OCR's domain). The EPUB renderer writes image resources and `<figure>`.
+

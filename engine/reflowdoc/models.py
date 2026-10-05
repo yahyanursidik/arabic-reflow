@@ -6,11 +6,18 @@ ReflowDoc answers "what is this content and how should it be read?" — never
 
 from __future__ import annotations
 
+import base64
 import uuid
 from enum import Enum
 from typing import Annotated, Literal, Union
 
-from pydantic import BaseModel, ConfigDict, Field
+from pydantic import (
+    BaseModel,
+    ConfigDict,
+    Field,
+    field_serializer,
+    field_validator,
+)
 
 SCHEMA_VERSION = "0.1"
 
@@ -75,6 +82,22 @@ class Resource(BaseModel):
     media_type: str | None = None
     filename: str | None = None
     source_page: int | None = Field(default=None, ge=1)
+    content: bytes | None = Field(
+        default=None,
+        description="Encoded payload (base64 in JSON). MVP: images are carried "
+        "inline so a ReflowDoc JSON is self-contained.",
+    )
+
+    @field_serializer("content", when_used="json")
+    def _serialize_content(self, value):
+        return base64.b64encode(value).decode("ascii") if value is not None else None
+
+    @field_validator("content", mode="before")
+    @classmethod
+    def _load_content(cls, value):
+        if isinstance(value, str):
+            return base64.b64decode(value)
+        return value
 
 
 class ReflowWarning(BaseModel):

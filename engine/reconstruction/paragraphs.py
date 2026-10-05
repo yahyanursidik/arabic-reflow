@@ -60,6 +60,8 @@ class ParagraphDraft:
     merged_block_count: int = 1
     is_heading: bool = False
     heading_level: int | None = None
+    footnote_marker: str | None = None
+    block_numbers: list[int] = field(default_factory=list)
 
     @property
     def text(self) -> str:
@@ -229,6 +231,7 @@ class _Accumulator:
         self.last_size = max_font_size(block)
         self.merged = 1
         self.cross_block_merges = 0
+        self.block_numbers = [block.number]
 
     @property
     def text(self) -> str:
@@ -274,6 +277,7 @@ class _Accumulator:
         self.last_line_width = _last_line_width(block)
         self.last_size = max_font_size(block)
         self.merged += 1
+        self.block_numbers.append(block.number)
 
     def absorb_fragment(self, block: RawBlock, runs: list[ContentRun]) -> None:
         self.absorb(block, runs, direct=True)
@@ -285,8 +289,9 @@ def build_paragraphs(
     headings: dict[int, "HeadingInfo"] | None = None,
     ref_width: float | None = None,
     gutter: float | None = None,
+    footnotes: dict[int, str] | None = None,
 ) -> list[ParagraphDraft]:
-    """Walk ordered blocks and produce paragraph/heading drafts.
+    """Walk ordered blocks and produce paragraph/heading/footnote drafts.
 
     When a column gutter is supplied, continuation width is judged against the
     block's own column width (lines in a 220pt column must not be held to a
@@ -294,6 +299,7 @@ def build_paragraphs(
     full-width blocks.
     """
     heading_map = headings or {}
+    footnote_map = footnotes or {}
     if ref_width is None:
         ref_width = reference_width(blocks)
 
@@ -322,6 +328,7 @@ def build_paragraphs(
                 runs=acc.runs,
                 confidence=confidence,
                 merged_block_count=acc.merged,
+                block_numbers=list(acc.block_numbers),
             )
         )
         acc = None
@@ -344,6 +351,22 @@ def build_paragraphs(
                     confidence=info.confidence,
                     is_heading=True,
                     heading_level=info.level,
+                    block_numbers=[block.number],
+                )
+            )
+            previous_block = block
+            continue
+
+        if block.number in footnote_map:
+            flush()
+            drafts.append(
+                ParagraphDraft(
+                    page=page,
+                    bbox=block.bbox,
+                    runs=runs,
+                    confidence=0.7,
+                    footnote_marker=footnote_map[block.number],
+                    block_numbers=[block.number],
                 )
             )
             previous_block = block

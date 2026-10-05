@@ -87,7 +87,11 @@ def _list(lb: ListBlock) -> str:
 
 
 def _image(img: ImageBlock, document: ReflowDocument) -> str:
-    src = f"resources/{img.resource_id}" if not img.resource_id.startswith("resources/") else img.resource_id
+    src = img.resource_id
+    for resource in document.resources:
+        if resource.id == img.resource_id:
+            src = f"resources/{resource.filename or resource.id}"
+            break
     alt = escape(img.alt) if img.alt else ""
     caption = ""
     if img.caption_block_id:

@@ -24,8 +24,10 @@ class LayoutReport(BaseModel):
     # PDF page (1-based) -> printed page number. "Preserve page provenance
     # internally" (M2-06): the mapping survives even though the block is gone.
     page_number_map: dict[int, int] = Field(default_factory=dict)
-    # Page -> detected column gutter x position (only when a gutter exists).
+    # Page -> first detected column gutter x position.
     gutters: dict[int, float] = Field(default_factory=dict)
+    # Page -> all detected gutters (M6-01, N-column layouts).
+    all_gutters: dict[int, list[float]] = Field(default_factory=dict)
 
 
 class OrderReport(BaseModel):

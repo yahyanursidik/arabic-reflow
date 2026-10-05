@@ -16,6 +16,7 @@ golden records with `scripts/update_golden.py` (commit both outputs).
 | `scanned.pdf` | Image-only page (no text layer) |
 | `hybrid.pdf` | Native page 1 + scanned page 2 |
 | `footnote-heavy.pdf` | Footnotes below a rule, reference markers |
+| `image-caption.pdf` | Embedded figure with caption below it (M6-05) |
 
 ## How Arabic is written into fixtures
 

@@ -4,7 +4,7 @@ build-backend = "hatchling.build"
 
 [project]
 name = "reflow-engine"
-version = "0.3.0"
+version = "0.4.0"
 description = "Open-source reconstruction engine converting mixed Arabic-Latin PDFs into semantic, reflowable EPUB 3 documents."
 readme = "README.md"
 requires-python = ">=3.11"
@@ -26,6 +26,14 @@ dev = [
     "pytest>=8.3.0",
     "httpx>=0.27.0",
     "pymupdf-fonts>=1.0.5",
+]
+ocr-paddle = [
+    "paddleocr>=3.0.0",
+    "numpy>=1.26.0",
+]
+ocr-tesseract = [
+    "pytesseract>=0.3.13",
+    "Pillow>=10.0.0",
 ]
 
 [tool.hatch.build.targets.wheel]

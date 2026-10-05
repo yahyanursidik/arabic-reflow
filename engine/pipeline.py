@@ -60,14 +60,44 @@ class ReconstructionResult:
     order: OrderReport
 
 
-def build_reflowdoc(source: str | bytes) -> ReconstructionResult:
-    """Run the full implemented pipeline: PDF/OCR in, ReflowDoc out."""
+def build_reflowdoc(
+    source: str | bytes,
+    *,
+    ocr_engine: "object | None" = None,  # engine.ocr.base.OcrEngine
+    ocr_languages: list[str] | None = None,
+) -> ReconstructionResult:
+    """Run the full implemented pipeline: PDF/OCR in, ReflowDoc out.
+
+    When an OCR engine is supplied, scanned pages and corrupted-Arabic pages
+    go through the OCR stage (M5) with native-vs-OCR comparison.
+    """
     profile = analyze(source)
     raw = extract(source)
+
+    ocr_report = None
+    if ocr_engine is not None:
+        from engine.ocr.decision import apply_ocr
+
+        raw, ocr_report = apply_ocr(source, profile, raw, ocr_engine, ocr_languages)
+
     raw, layout_report = detect_layout(raw)
     raw, order_report = reconstruct_reading_order(raw, profile, layout_report)
     raw = detect_scripts(raw)
     document = reconstruct_semantics(profile, raw, layout_report, order_report)
+
+    if ocr_report is not None:
+        from engine.reflowdoc.models import ReflowWarning
+
+        for code, message, page in ocr_report.warnings:
+            document.warnings.append(
+                ReflowWarning(
+                    code=code,
+                    severity="info" if code == "OCR_USED" else "warning",
+                    message=message,
+                    source_page=page,
+                )
+            )
+
     return ReconstructionResult(
         profile=profile,
         document=document,

@@ -1,1 +1,2 @@
-"""Pluggable OCR adapters (Milestone 5). Not implemented yet."""
+"""OCR layer (Milestone 5): replaceable engines, per-page decisions,
+and native-vs-OCR candidate comparison."""

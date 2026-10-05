@@ -1,0 +1,22 @@
+{
+  "fixture": "image-caption.pdf",
+  "page_count": 1,
+  "classification": "native",
+  "arabic_detected": false,
+  "arabic_letter_count": 0,
+  "harakat_count": 0,
+  "presentation_form_count": 0,
+  "full_text_sha256": "e3286f00cb9ed927aafe67d6e62f109d7f46d7272fc79f103fb56cf1ac157a93",
+  "pages": [
+    {
+      "page": 1,
+      "blocks": [
+        "Gambar dan Keterangan",
+        "Para ulama sepakat bahwa niat merupakan syarat sahnya berbagai amal ibadah. Oleh karena",
+        "itu, para penyusun kitab hadits menempatkan bab tentang niat pada awal kitab, sebelum",
+        "membahas bab-bab lainnya.",
+        "Gambar 1: Diagram alir rekonstruksi dokumen."
+      ]
+    }
+  ]
+}

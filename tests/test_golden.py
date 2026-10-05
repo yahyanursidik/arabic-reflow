@@ -32,9 +32,13 @@ def _actual(golden: dict, fixtures_dir) -> dict:
     }
 
 
-def test_golden_corpus_loads(golden_dir) -> None:
-    goldens = sorted(golden_dir.glob("*.golden.json"))
-    assert len(goldens) == 9
+def test_golden_corpus_covers_every_fixture(golden_dir, fixtures_dir) -> None:
+    fixtures = {p.stem for p in fixtures_dir.glob("*.pdf")}
+    goldens = {p.name[: -len(".golden.json")] for p in golden_dir.glob("*.golden.json")}
+    assert goldens == fixtures, (
+        "every fixture must have exactly one approved golden record"
+    )
+    assert len(goldens) >= 9
 
 
 def test_arabic_golden_fixtures_do_not_regress(golden_dir, fixtures_dir) -> None:

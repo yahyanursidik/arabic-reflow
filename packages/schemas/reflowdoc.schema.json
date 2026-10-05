@@ -1199,6 +1199,20 @@
           ],
           "default": null,
           "title": "Source Page"
+        },
+        "content": {
+          "anyOf": [
+            {
+              "format": "binary",
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Encoded payload (base64 in JSON). MVP: images are carried inline so a ReflowDoc JSON is self-contained.",
+          "title": "Content"
         }
       },
       "required": [
