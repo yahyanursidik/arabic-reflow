@@ -1,0 +1,21 @@
+{
+  "fixture": "arabic-vocalized.pdf",
+  "page_count": 1,
+  "classification": "native",
+  "arabic_detected": true,
+  "arabic_letter_count": 104,
+  "harakat_count": 71,
+  "presentation_form_count": 83,
+  "full_text_sha256": "ab5428551b19097f4edbd42f4f1976c84f71b63da4d2d9b60bc00766d5480808",
+  "pages": [
+    {
+      "page": 1,
+      "blocks": [
+        "ﺑِﺴْﻢِ ﷲსِ اﻟﺮსﺣْﻤَٰﻦِ اﻟﺮსﺣِﻴﻢِ",
+        "إِﻧსﻤَﺎ اﻷَْﻋْﻤَﺎلُ ﺑِﺎﻟﻨტﻴსﺎتِ",
+        "إِﻧსﻤَﺎ اﻷَْﻋْﻤَﺎلُ ﺑِﺎﻟﻨტﻴსﺎتِ، وَإِﻧსﻤَﺎ ﻟِﻜُﻞტ اﻣࣱِْ ئٍ ﻣَﺎ ﻧَﻮَى، ﻓَﻤَﻦْ ﻛَﺎﻧَﺖْ ﻫِﺠْﺮَﺗُﻪُ إِﻟَﻰ ﷲსِ وَرَﺳُﻮﻟِﻪِ ﻓَﻬِﺠْﺮَﺗُﻪُ",
+        "إِﻟَﻰ ﷲსِ وَرَﺳُﻮﻟِﻪِ"
+      ]
+    }
+  ]
+}

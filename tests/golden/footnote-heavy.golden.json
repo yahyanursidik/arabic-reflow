@@ -1,0 +1,27 @@
+{
+  "fixture": "footnote-heavy.pdf",
+  "page_count": 1,
+  "classification": "native",
+  "arabic_detected": false,
+  "arabic_letter_count": 0,
+  "harakat_count": 0,
+  "presentation_form_count": 0,
+  "full_text_sha256": "519046ecaac210cae6d3e0df7d68c8f42a9bfbfb51a9d5473e9bf36b4f613be2",
+  "pages": [
+    {
+      "page": 1,
+      "blocks": [
+        "Catatan Kaki",
+        "Kitab ini mengumpulkan hadits-hadits pilihan dari Shahih Bukhari dan Shahih Muslim yang",
+        "disusun sesuai bab-bab ﬁkih. Setiap hadits disertai penjelasan singkat agar pembaca pemula",
+        "dapat memahami kandungannya tanpa kesulitan. Pembahasan ini merujuk pada Shahih",
+        "Bukhari.1",
+        "Para ulama sepakat bahwa niat merupakan syarat sahnya berbagai amal ibadah. Oleh karena",
+        "itu, para penyusun kitab hadits menempatkan bab tentang niat pada awal kitab, sebelum",
+        "membahas bab-bab lainnya. Lihat juga penjelasan pada catatan berikut.2",
+        "1. Muhammad ibn Ismail al-Bukhari, Shahih al-Bukhari, hadits ke-1.",
+        "2. Muslim ibn al-Hajjaj, Shahih Muslim, hadits ke-16."
+      ]
+    }
+  ]
+}

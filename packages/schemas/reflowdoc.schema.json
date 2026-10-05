@@ -1,0 +1,1464 @@
+{
+  "$defs": {
+    "ArabicIntegrity": {
+      "description": "Arabic diagnostic metadata attached to blocks/spans when applicable.",
+      "properties": {
+        "score": {
+          "maximum": 1.0,
+          "minimum": 0.0,
+          "title": "Score",
+          "type": "number"
+        },
+        "presentation_forms_detected": {
+          "default": false,
+          "title": "Presentation Forms Detected",
+          "type": "boolean"
+        },
+        "suspicious_spacing": {
+          "default": false,
+          "title": "Suspicious Spacing",
+          "type": "boolean"
+        },
+        "combining_mark_warnings": {
+          "default": 0,
+          "title": "Combining Mark Warnings",
+          "type": "integer"
+        },
+        "bidi_warning": {
+          "default": false,
+          "title": "Bidi Warning",
+          "type": "boolean"
+        }
+      },
+      "required": [
+        "score"
+      ],
+      "title": "ArabicIntegrity",
+      "type": "object"
+    },
+    "Chapter": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "title": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "None while chapter detection is incomplete (ungrouped chapter)",
+          "title": "Title"
+        },
+        "level": {
+          "default": 1,
+          "minimum": 1,
+          "title": "Level",
+          "type": "integer"
+        },
+        "blocks": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "footnote": "#/$defs/FootnoteBlock",
+                "heading": "#/$defs/HeadingBlock",
+                "image": "#/$defs/ImageBlock",
+                "list": "#/$defs/ListBlock",
+                "page_break": "#/$defs/PageBreakBlock",
+                "paragraph": "#/$defs/ParagraphBlock",
+                "quote": "#/$defs/QuoteBlock",
+                "table": "#/$defs/TableBlock"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/HeadingBlock"
+              },
+              {
+                "$ref": "#/$defs/ParagraphBlock"
+              },
+              {
+                "$ref": "#/$defs/QuoteBlock"
+              },
+              {
+                "$ref": "#/$defs/ListBlock"
+              },
+              {
+                "$ref": "#/$defs/ImageBlock"
+              },
+              {
+                "$ref": "#/$defs/FootnoteBlock"
+              },
+              {
+                "$ref": "#/$defs/TableBlock"
+              },
+              {
+                "$ref": "#/$defs/PageBreakBlock"
+              }
+            ]
+          },
+          "title": "Blocks",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "Chapter",
+      "type": "object"
+    },
+    "Direction": {
+      "description": "Inline base direction for blocks and spans.",
+      "enum": [
+        "ltr",
+        "rtl"
+      ],
+      "title": "Direction",
+      "type": "string"
+    },
+    "DocumentMetadata": {
+      "properties": {
+        "title": {
+          "default": "",
+          "title": "Title",
+          "type": "string"
+        },
+        "author": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Author",
+          "type": "array"
+        },
+        "publisher": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Publisher"
+        },
+        "languages": {
+          "description": "BCP-47 style labels; minimum supported: id, ar, en, unknown",
+          "items": {
+            "type": "string"
+          },
+          "title": "Languages",
+          "type": "array"
+        },
+        "description": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Description"
+        },
+        "identifier": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Identifier"
+        },
+        "source_filename": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Filename"
+        }
+      },
+      "title": "DocumentMetadata",
+      "type": "object"
+    },
+    "FootnoteBlock": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "lang": {
+          "default": "unknown",
+          "title": "Lang",
+          "type": "string"
+        },
+        "script": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScriptClass"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "dir": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Direction"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confidence"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        },
+        "modified_by_user": {
+          "default": false,
+          "description": "True only when a human explicitly edited the content",
+          "title": "Modified By User",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "footnote",
+          "default": "footnote",
+          "title": "Type",
+          "type": "string"
+        },
+        "marker": {
+          "title": "Marker",
+          "type": "string"
+        },
+        "blocks": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "footnote": "#/$defs/FootnoteBlock",
+                "heading": "#/$defs/HeadingBlock",
+                "image": "#/$defs/ImageBlock",
+                "list": "#/$defs/ListBlock",
+                "page_break": "#/$defs/PageBreakBlock",
+                "paragraph": "#/$defs/ParagraphBlock",
+                "quote": "#/$defs/QuoteBlock",
+                "table": "#/$defs/TableBlock"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/HeadingBlock"
+              },
+              {
+                "$ref": "#/$defs/ParagraphBlock"
+              },
+              {
+                "$ref": "#/$defs/QuoteBlock"
+              },
+              {
+                "$ref": "#/$defs/ListBlock"
+              },
+              {
+                "$ref": "#/$defs/ImageBlock"
+              },
+              {
+                "$ref": "#/$defs/FootnoteBlock"
+              },
+              {
+                "$ref": "#/$defs/TableBlock"
+              },
+              {
+                "$ref": "#/$defs/PageBreakBlock"
+              }
+            ]
+          },
+          "title": "Blocks",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "marker"
+      ],
+      "title": "FootnoteBlock",
+      "type": "object"
+    },
+    "HeadingBlock": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "lang": {
+          "default": "unknown",
+          "title": "Lang",
+          "type": "string"
+        },
+        "script": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScriptClass"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "dir": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Direction"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confidence"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        },
+        "modified_by_user": {
+          "default": false,
+          "description": "True only when a human explicitly edited the content",
+          "title": "Modified By User",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "heading",
+          "default": "heading",
+          "title": "Type",
+          "type": "string"
+        },
+        "level": {
+          "default": 1,
+          "maximum": 6,
+          "minimum": 1,
+          "title": "Level",
+          "type": "integer"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "source_text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Text"
+        },
+        "transformations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Transformations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "text"
+      ],
+      "title": "HeadingBlock",
+      "type": "object"
+    },
+    "ImageBlock": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "lang": {
+          "default": "unknown",
+          "title": "Lang",
+          "type": "string"
+        },
+        "script": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScriptClass"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "dir": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Direction"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confidence"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        },
+        "modified_by_user": {
+          "default": false,
+          "description": "True only when a human explicitly edited the content",
+          "title": "Modified By User",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "image",
+          "default": "image",
+          "title": "Type",
+          "type": "string"
+        },
+        "resource_id": {
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "alt": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Alt"
+        },
+        "caption_block_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Caption Block Id"
+        }
+      },
+      "required": [
+        "id",
+        "resource_id"
+      ],
+      "title": "ImageBlock",
+      "type": "object"
+    },
+    "ListBlock": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "lang": {
+          "default": "unknown",
+          "title": "Lang",
+          "type": "string"
+        },
+        "script": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScriptClass"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "dir": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Direction"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confidence"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        },
+        "modified_by_user": {
+          "default": false,
+          "description": "True only when a human explicitly edited the content",
+          "title": "Modified By User",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "list",
+          "default": "list",
+          "title": "Type",
+          "type": "string"
+        },
+        "ordered": {
+          "default": false,
+          "title": "Ordered",
+          "type": "boolean"
+        },
+        "items": {
+          "items": {
+            "$ref": "#/$defs/ListItem"
+          },
+          "title": "Items",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "ListBlock",
+      "type": "object"
+    },
+    "ListItem": {
+      "properties": {
+        "blocks": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "footnote": "#/$defs/FootnoteBlock",
+                "heading": "#/$defs/HeadingBlock",
+                "image": "#/$defs/ImageBlock",
+                "list": "#/$defs/ListBlock",
+                "page_break": "#/$defs/PageBreakBlock",
+                "paragraph": "#/$defs/ParagraphBlock",
+                "quote": "#/$defs/QuoteBlock",
+                "table": "#/$defs/TableBlock"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/HeadingBlock"
+              },
+              {
+                "$ref": "#/$defs/ParagraphBlock"
+              },
+              {
+                "$ref": "#/$defs/QuoteBlock"
+              },
+              {
+                "$ref": "#/$defs/ListBlock"
+              },
+              {
+                "$ref": "#/$defs/ImageBlock"
+              },
+              {
+                "$ref": "#/$defs/FootnoteBlock"
+              },
+              {
+                "$ref": "#/$defs/TableBlock"
+              },
+              {
+                "$ref": "#/$defs/PageBreakBlock"
+              }
+            ]
+          },
+          "title": "Blocks",
+          "type": "array"
+        }
+      },
+      "title": "ListItem",
+      "type": "object"
+    },
+    "PageBreakBlock": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "lang": {
+          "default": "unknown",
+          "title": "Lang",
+          "type": "string"
+        },
+        "script": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScriptClass"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "dir": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Direction"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confidence"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        },
+        "modified_by_user": {
+          "default": false,
+          "description": "True only when a human explicitly edited the content",
+          "title": "Modified By User",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "page_break",
+          "default": "page_break",
+          "title": "Type",
+          "type": "string"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "PageBreakBlock",
+      "type": "object"
+    },
+    "ParagraphBlock": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "lang": {
+          "default": "unknown",
+          "title": "Lang",
+          "type": "string"
+        },
+        "script": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScriptClass"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "dir": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Direction"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confidence"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        },
+        "modified_by_user": {
+          "default": false,
+          "description": "True only when a human explicitly edited the content",
+          "title": "Modified By User",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "paragraph",
+          "default": "paragraph",
+          "title": "Type",
+          "type": "string"
+        },
+        "content": {
+          "items": {
+            "discriminator": {
+              "mapping": {
+                "span": "#/$defs/SpanNode",
+                "text": "#/$defs/TextNode"
+              },
+              "propertyName": "type"
+            },
+            "oneOf": [
+              {
+                "$ref": "#/$defs/TextNode"
+              },
+              {
+                "$ref": "#/$defs/SpanNode"
+              }
+            ]
+          },
+          "minItems": 1,
+          "title": "Content",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "content"
+      ],
+      "title": "ParagraphBlock",
+      "type": "object"
+    },
+    "QuoteBlock": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "lang": {
+          "default": "unknown",
+          "title": "Lang",
+          "type": "string"
+        },
+        "script": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScriptClass"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "dir": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Direction"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confidence"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        },
+        "modified_by_user": {
+          "default": false,
+          "description": "True only when a human explicitly edited the content",
+          "title": "Modified By User",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "quote",
+          "default": "quote",
+          "title": "Type",
+          "type": "string"
+        },
+        "subtype": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "e.g. 'arabic' for Arabic quote blocks",
+          "title": "Subtype"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "source_text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Text"
+        },
+        "transformations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Transformations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "id",
+        "text"
+      ],
+      "title": "QuoteBlock",
+      "type": "object"
+    },
+    "ReflowWarning": {
+      "description": "Explicit, non-silent uncertainty (ARCHITECTURE.md section 10).",
+      "properties": {
+        "code": {
+          "description": "Warning code, e.g. READING_ORDER_UNCERTAIN, LOW_ARABIC_CONFIDENCE",
+          "title": "Code",
+          "type": "string"
+        },
+        "severity": {
+          "default": "warning",
+          "enum": [
+            "info",
+            "warning",
+            "error"
+          ],
+          "title": "Severity",
+          "type": "string"
+        },
+        "message": {
+          "title": "Message",
+          "type": "string"
+        },
+        "source_page": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Page"
+        },
+        "block_ids": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Block Ids",
+          "type": "array"
+        }
+      },
+      "required": [
+        "code",
+        "message"
+      ],
+      "title": "ReflowWarning",
+      "type": "object"
+    },
+    "Resource": {
+      "description": "A binary resource referenced by blocks (image, font, table fallback).",
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "kind": {
+          "description": "e.g. 'image' or 'font'",
+          "title": "Kind",
+          "type": "string"
+        },
+        "media_type": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Media Type"
+        },
+        "filename": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Filename"
+        },
+        "source_page": {
+          "anyOf": [
+            {
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Page"
+        }
+      },
+      "required": [
+        "id",
+        "kind"
+      ],
+      "title": "Resource",
+      "type": "object"
+    },
+    "ScriptClass": {
+      "description": "Script classification. Script matters more than natural language (PRD 8.6).",
+      "enum": [
+        "Arabic",
+        "Latin",
+        "Mixed",
+        "Numeric",
+        "Neutral"
+      ],
+      "title": "ScriptClass",
+      "type": "string"
+    },
+    "SourceRef": {
+      "description": "Extraction provenance, kept for diagnostics only.\n\nCoordinates are PDF points and must never be used by renderers for layout.",
+      "properties": {
+        "page": {
+          "description": "1-based source page number",
+          "minimum": 1,
+          "title": "Page",
+          "type": "integer"
+        },
+        "bbox": {
+          "anyOf": [
+            {
+              "items": {
+                "type": "number"
+              },
+              "type": "array"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "[x0, y0, x1, y1] in PDF points, diagnostics only",
+          "title": "Bbox"
+        }
+      },
+      "required": [
+        "page"
+      ],
+      "title": "SourceRef",
+      "type": "object"
+    },
+    "SpanNode": {
+      "description": "An inline span with its own language/script/direction (mixed-direction text).",
+      "properties": {
+        "type": {
+          "const": "span",
+          "default": "span",
+          "title": "Type",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "lang": {
+          "default": "unknown",
+          "title": "Lang",
+          "type": "string"
+        },
+        "script": {
+          "$ref": "#/$defs/ScriptClass",
+          "default": "Neutral"
+        },
+        "dir": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Direction"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "source_text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Source Text"
+        },
+        "transformations": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Transformations",
+          "type": "array"
+        },
+        "arabic_integrity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ArabicIntegrity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "SpanNode",
+      "type": "object"
+    },
+    "TableBlock": {
+      "properties": {
+        "id": {
+          "title": "Id",
+          "type": "string"
+        },
+        "source": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/SourceRef"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "lang": {
+          "default": "unknown",
+          "title": "Lang",
+          "type": "string"
+        },
+        "script": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ScriptClass"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "dir": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Direction"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        },
+        "confidence": {
+          "anyOf": [
+            {
+              "maximum": 1.0,
+              "minimum": 0.0,
+              "type": "number"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Confidence"
+        },
+        "warnings": {
+          "items": {
+            "type": "string"
+          },
+          "title": "Warnings",
+          "type": "array"
+        },
+        "modified_by_user": {
+          "default": false,
+          "description": "True only when a human explicitly edited the content",
+          "title": "Modified By User",
+          "type": "boolean"
+        },
+        "type": {
+          "const": "table",
+          "default": "table",
+          "title": "Type",
+          "type": "string"
+        },
+        "rows": {
+          "items": {
+            "items": {
+              "$ref": "#/$defs/TableCell"
+            },
+            "type": "array"
+          },
+          "title": "Rows",
+          "type": "array"
+        },
+        "fallback_resource_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Fallback Resource Id"
+        }
+      },
+      "required": [
+        "id"
+      ],
+      "title": "TableBlock",
+      "type": "object"
+    },
+    "TableCell": {
+      "properties": {
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "lang": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "title": "Lang"
+        },
+        "dir": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/Direction"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "TableCell",
+      "type": "object"
+    },
+    "TextNode": {
+      "description": "A run of text in the block's primary language/direction.",
+      "properties": {
+        "type": {
+          "const": "text",
+          "default": "text",
+          "title": "Type",
+          "type": "string"
+        },
+        "text": {
+          "title": "Text",
+          "type": "string"
+        },
+        "source_text": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Original extraction when a transformation was applied",
+          "title": "Source Text"
+        },
+        "transformations": {
+          "description": "Applied transformations, e.g. ['dehyphenation']",
+          "items": {
+            "type": "string"
+          },
+          "title": "Transformations",
+          "type": "array"
+        }
+      },
+      "required": [
+        "text"
+      ],
+      "title": "TextNode",
+      "type": "object"
+    }
+  },
+  "properties": {
+    "schema_version": {
+      "default": "0.1",
+      "title": "Schema Version",
+      "type": "string"
+    },
+    "document_id": {
+      "title": "Document Id",
+      "type": "string"
+    },
+    "metadata": {
+      "$ref": "#/$defs/DocumentMetadata"
+    },
+    "chapters": {
+      "items": {
+        "$ref": "#/$defs/Chapter"
+      },
+      "title": "Chapters",
+      "type": "array"
+    },
+    "resources": {
+      "items": {
+        "$ref": "#/$defs/Resource"
+      },
+      "title": "Resources",
+      "type": "array"
+    },
+    "warnings": {
+      "items": {
+        "$ref": "#/$defs/ReflowWarning"
+      },
+      "title": "Warnings",
+      "type": "array"
+    }
+  },
+  "title": "ReflowDocument",
+  "type": "object",
+  "$schema": "https://json-schema.org/draft/2020-12/schema",
+  "$id": "https://reflow.dev/schemas/reflowdoc-0.1.json"
+}

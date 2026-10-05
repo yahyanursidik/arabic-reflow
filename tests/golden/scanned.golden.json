@@ -1,0 +1,16 @@
+{
+  "fixture": "scanned.pdf",
+  "page_count": 1,
+  "classification": "scanned",
+  "arabic_detected": false,
+  "arabic_letter_count": 0,
+  "harakat_count": 0,
+  "presentation_form_count": 0,
+  "full_text_sha256": "e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855",
+  "pages": [
+    {
+      "page": 1,
+      "blocks": []
+    }
+  ]
+}

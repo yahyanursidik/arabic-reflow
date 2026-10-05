@@ -1,0 +1,30 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+venv/
+.pytest_cache/
+build/
+dist/
+
+# Node
+node_modules/
+apps/web/.next/
+apps/web/next-env.d.ts
+apps/web/*.tsbuildinfo
+
+# Environments / editors
+.env
+.env.local
+.idea/
+.vscode/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Runtime output (MVP storage layout lives in /tmp/reflow)
+/tmp/
+output/
+*.epub

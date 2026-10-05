@@ -1,0 +1,48 @@
+{
+  "fixture": "two-column.pdf",
+  "page_count": 1,
+  "classification": "native",
+  "arabic_detected": false,
+  "arabic_letter_count": 0,
+  "harakat_count": 0,
+  "presentation_form_count": 0,
+  "full_text_sha256": "dc0261e2b38d435690fe8d015d086c360706b02b5eb96466583658c1c2fcf510",
+  "pages": [
+    {
+      "page": 1,
+      "blocks": [
+        "Dua Kolom",
+        "Kolom kiri bagian 1. Para ulama sepakat bahwa niat",
+        "merupakan syarat sahnya berbagai amal ibadah.",
+        "Oleh karena itu, para penyusun kitab hadits",
+        "menempatkan bab tentang niat pada awal kitab,",
+        "sebelum membahas bab-bab lainnya.",
+        "Kolom kanan bagian 1. Para ulama sepakat bahwa",
+        "niat merupakan syarat sahnya berbagai amal",
+        "ibadah. Oleh karena itu, para penyusun kitab",
+        "hadits menempatkan bab tentang niat pada awal",
+        "kitab, sebelum membahas bab-bab lainnya.",
+        "Kolom kiri bagian 2. Para ulama sepakat bahwa",
+        "niat merupakan syarat sahnya berbagai amal",
+        "ibadah. Oleh karena itu, para penyusun kitab",
+        "hadits menempatkan bab tentang niat pada awal",
+        "kitab, sebelum membahas bab-bab lainnya.",
+        "Kolom kanan bagian 2. Para ulama sepakat bahwa",
+        "niat merupakan syarat sahnya berbagai amal",
+        "ibadah. Oleh karena itu, para penyusun kitab",
+        "hadits menempatkan bab tentang niat pada awal",
+        "kitab, sebelum membahas bab-bab lainnya.",
+        "Kolom kiri bagian 3. Para ulama sepakat bahwa",
+        "niat merupakan syarat sahnya berbagai amal",
+        "ibadah. Oleh karena itu, para penyusun kitab",
+        "hadits menempatkan bab tentang niat pada awal",
+        "kitab, sebelum membahas bab-bab lainnya.",
+        "Kolom kanan bagian 3. Para ulama sepakat bahwa",
+        "niat merupakan syarat sahnya berbagai amal",
+        "ibadah. Oleh karena itu, para penyusun kitab",
+        "hadits menempatkan bab tentang niat pada awal",
+        "kitab, sebelum membahas bab-bab lainnya."
+      ]
+    }
+  ]
+}

@@ -1,0 +1,105 @@
+{
+  "schema_version": "0.1",
+  "document_id": "00000000-0000-0000-0000-000000000001",
+  "metadata": {
+    "title": "Shahih Muslim Pilihan",
+    "author": [
+      "Imam Muslim"
+    ],
+    "publisher": null,
+    "languages": [
+      "id",
+      "ar"
+    ],
+    "description": null,
+    "identifier": null,
+    "source_filename": "sample.pdf"
+  },
+  "chapters": [
+    {
+      "id": "chapter-001",
+      "title": "Pendahuluan",
+      "level": 1,
+      "blocks": [
+        {
+          "id": "block-001",
+          "source": {
+            "page": 3,
+            "bbox": [
+              72.0,
+              120.0,
+              500.0,
+              180.0
+            ]
+          },
+          "lang": "id",
+          "script": "Latin",
+          "dir": "ltr",
+          "confidence": 0.98,
+          "warnings": [],
+          "modified_by_user": false,
+          "type": "paragraph",
+          "content": [
+            {
+              "type": "text",
+              "text": "Hadits ini diriwayatkan dari ",
+              "source_text": null,
+              "transformations": []
+            },
+            {
+              "type": "span",
+              "text": "أبي هريرة رضي الله عنه",
+              "lang": "ar",
+              "script": "Arabic",
+              "dir": "rtl",
+              "source_text": null,
+              "transformations": [],
+              "arabic_integrity": null
+            },
+            {
+              "type": "text",
+              "text": " dalam Shahih Muslim.",
+              "source_text": null,
+              "transformations": []
+            }
+          ]
+        },
+        {
+          "id": "block-002",
+          "source": null,
+          "lang": "ar",
+          "script": "Arabic",
+          "dir": "rtl",
+          "confidence": 0.99,
+          "warnings": [],
+          "modified_by_user": false,
+          "type": "quote",
+          "subtype": "arabic",
+          "text": "إِنَّمَا الْأَعْمَالُ بِالنِّيَّاتِ",
+          "source_text": null,
+          "transformations": []
+        }
+      ]
+    }
+  ],
+  "resources": [
+    {
+      "id": "img-001",
+      "kind": "image",
+      "media_type": "image/png",
+      "filename": null,
+      "source_page": 2
+    }
+  ],
+  "warnings": [
+    {
+      "code": "READING_ORDER_UNCERTAIN",
+      "severity": "warning",
+      "message": "Column boundary is ambiguous.",
+      "source_page": 14,
+      "block_ids": [
+        "block-012"
+      ]
+    }
+  ]
+}

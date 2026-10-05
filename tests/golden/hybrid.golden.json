@@ -1,0 +1,28 @@
+{
+  "fixture": "hybrid.pdf",
+  "page_count": 2,
+  "classification": "hybrid",
+  "arabic_detected": false,
+  "arabic_letter_count": 0,
+  "harakat_count": 0,
+  "presentation_form_count": 0,
+  "full_text_sha256": "6ed7e5429bdea9fbebf163d9c231bee422b65f406ebdd35edc48addafea96669",
+  "pages": [
+    {
+      "page": 1,
+      "blocks": [
+        "Halaman Teks Asli",
+        "Kitab ini mengumpulkan hadits-hadits pilihan dari Shahih Bukhari dan Shahih Muslim yang",
+        "disusun sesuai bab-bab ﬁkih. Setiap hadits disertai penjelasan singkat agar pembaca pemula",
+        "dapat memahami kandungannya tanpa kesulitan.",
+        "Para ulama sepakat bahwa niat merupakan syarat sahnya berbagai amal ibadah. Oleh karena",
+        "itu, para penyusun kitab hadits menempatkan bab tentang niat pada awal kitab, sebelum",
+        "membahas bab-bab lainnya."
+      ]
+    },
+    {
+      "page": 2,
+      "blocks": []
+    }
+  ]
+}

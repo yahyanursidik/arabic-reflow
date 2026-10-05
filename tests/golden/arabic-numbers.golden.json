@@ -1,0 +1,19 @@
+{
+  "fixture": "arabic-numbers.pdf",
+  "page_count": 1,
+  "classification": "native",
+  "arabic_detected": true,
+  "arabic_letter_count": 65,
+  "harakat_count": 1,
+  "presentation_form_count": 50,
+  "full_text_sha256": "37f4d3271b5bd32efa3642594e1d1ac541d57af74f9e177ff7c09b0433e01694",
+  "pages": [
+    {
+      "page": 1,
+      "blocks": [
+        "ﻓﻲ ﻋﺎم \n٧٤٤١\n ﻫـ، ﻃﺒﻊ اﻟﻜﺘﺎب ﻟﻠﻤﺮة اﻟﺜﺎﻧﻴﺔ؛ وﺻﺤّﺢ اﻟﻄﺒﻌﺔ اﻷوﻟﻰ\n.",
+        "ﻋﺪد اﻟﺼﻔﺤﺎت: \n٠٢٣\n ﺻﻔﺤﺔ໬ اﻟﺴﻌﺮ: \n٠٠٠٬٠٥\n ࣯ﻳﺎل\n."
+      ]
+    }
+  ]
+}

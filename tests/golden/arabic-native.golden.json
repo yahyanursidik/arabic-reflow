@@ -1,0 +1,21 @@
+{
+  "fixture": "arabic-native.pdf",
+  "page_count": 1,
+  "classification": "native",
+  "arabic_detected": true,
+  "arabic_letter_count": 98,
+  "harakat_count": 0,
+  "presentation_form_count": 75,
+  "full_text_sha256": "67a3ac8e613942f5e5bc260ed2a76cfa9a96092ca2e8d80cc9cd180c4bcc94f9",
+  "pages": [
+    {
+      "page": 1,
+      "blocks": [
+        "اﻟﻔﺎﺗﺤﺔ",
+        "اﻟﺤﻤﺪ ﻟﻠﻪ رب اﻟﻌﺎﻟﻤﻴﻦ، واﻟﺼﻼة واﻟﺴﻼم ﻋﻠﻰ أﺷﺮف اﻷﻧﺒﻴﺎء واﻟﻤﺮﺳﻠﻴﻦ، ﻧﺎﺑﻌﺎ إﻟﻰ ﻳﻮم",
+        "اﻟﺪﻳﻦ، أﻣﺎ ﺑﻌﺪ\n:",
+        "ﺑﺴﻢ ﷲ اﻟﺮﺣﻤﻦ اﻟﺮﺣﻴﻢ"
+      ]
+    }
+  ]
+}

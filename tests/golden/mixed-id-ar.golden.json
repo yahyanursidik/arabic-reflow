@@ -1,0 +1,26 @@
+{
+  "fixture": "mixed-id-ar.pdf",
+  "page_count": 1,
+  "classification": "native",
+  "arabic_detected": true,
+  "arabic_letter_count": 31,
+  "harakat_count": 9,
+  "presentation_form_count": 24,
+  "full_text_sha256": "f1772d51c316f795f712d5b1c19e7ba5b04717015c7f09045455d7ebf1746215",
+  "pages": [
+    {
+      "page": 1,
+      "blocks": [
+        "Bab Pertama: Niat",
+        "Kitab ini mengumpulkan hadits-hadits pilihan dari Shahih Bukhari dan Shahih Muslim yang",
+        "disusun sesuai bab-bab ﬁkih. Setiap hadits disertai penjelasan singkat agar pembaca pemula",
+        "dapat memahami kandungannya tanpa kesulitan.",
+        "Hadits ini diriwayatkan dari أﺑﻲ ﻫࣱﻳﺮة رﺿﻲ ﷲ ﻋﻨﻪ\n dalam Shahih Muslim.",
+        "Menurut penjelasan para ulama, makna hadits \n\"إِﻧსﻤَﺎ اﻷَْﻋْﻤَﺎلُ ﺑِﺎﻟﻨტﻴსﺎتِ\"\n adalah sebagai berikut.",
+        "Para ulama sepakat bahwa niat merupakan syarat sahnya berbagai amal ibadah. Oleh karena",
+        "itu, para penyusun kitab hadits menempatkan bab tentang niat pada awal kitab, sebelum",
+        "membahas bab-bab lainnya."
+      ]
+    }
+  ]
+}

@@ -1,0 +1,10 @@
+@import "tailwindcss";
+
+/* Restrained document-tool typography (VIBE-CODING-INSTRUCTIONS.md, UI direction). */
+:root {
+  color-scheme: light;
+}
+
+body {
+  @apply bg-white text-neutral-900 antialiased;
+}
