@@ -92,6 +92,13 @@ def create_app(storage_dir: Path | None = None) -> FastAPI:
         meta = storage.create_document(file.filename or "document.pdf", content)
         return meta
 
+    @app.get("/api/v1/documents/{document_id}")
+    def get_document(document_id: str) -> dict:
+        meta = storage.get_meta(document_id) if storage.exists(document_id) else None
+        if meta is None:
+            raise HTTPException(status_code=404, detail="document not found")
+        return meta
+
     @app.post("/api/v1/documents/{document_id}/analyze")
     def analyze_document(document_id: str) -> dict:
         _require_document(document_id)
@@ -100,6 +107,47 @@ def create_app(storage_dir: Path | None = None) -> FastAPI:
         profile = analyze(storage.source_path(document_id))
         storage.write_profile(document_id, profile)
         return profile.model_dump()
+
+    @app.get("/api/v1/documents/{document_id}/profile")
+    def get_profile(document_id: str) -> dict:
+        _require_document(document_id)
+        profile = storage.read_profile(document_id)
+        if profile is None:
+            raise HTTPException(
+                status_code=404, detail="document has not been analyzed yet"
+            )
+        return profile
+
+    @app.get("/api/v1/documents/{document_id}/job")
+    def get_document_job(document_id: str) -> dict:
+        _require_document(document_id)
+        job = jobs.get_for_document(document_id)
+        if job is None:
+            raise HTTPException(status_code=404, detail="no conversion job yet")
+        return job.model_dump()
+
+    @app.get("/api/v1/documents/{document_id}/source/pages/{page_number}.png")
+    def get_source_page(document_id: str, page_number: int) -> FileResponse:
+        """Page raster for the source-vs-output review pane (M8)."""
+        _require_document(document_id)
+        if page_number < 1:
+            raise HTTPException(status_code=422, detail="page number starts at 1")
+        from engine.ocr.base import render_page_png
+
+        source = storage.source_path(document_id)
+        try:
+            doc = pymupdf.open(source)
+        except Exception:
+            raise HTTPException(status_code=415, detail="unreadable PDF")
+        try:
+            if page_number > doc.page_count:
+                raise HTTPException(status_code=404, detail="page out of range")
+            png = render_page_png(doc.load_page(page_number - 1), dpi=110)
+        finally:
+            doc.close()
+        target = storage.doc_dir(document_id) / f"page-{page_number}.png"
+        target.write_bytes(png)
+        return FileResponse(target, media_type="image/png")
 
     # ---- conversion (M7-03, M7-04) -------------------------------------------------
 

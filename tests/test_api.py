@@ -109,6 +109,45 @@ def test_analyze_unknown_document_404(client) -> None:
     assert client.post("/api/v1/documents/doesnotexist/analyze").status_code == 404
 
 
+# --- Review support endpoints (M8) -----------------------------------------------------
+
+
+def test_document_meta_profile_job_and_source_page(client, fixtures_dir) -> None:
+    meta = _upload(client, fixtures_dir, "indonesian-native.pdf")
+    document_id = meta["id"]
+
+    got = client.get(f"/api/v1/documents/{document_id}")
+    assert got.status_code == 200
+    assert got.json()["filename"] == "indonesian-native.pdf"
+
+    assert client.get(f"/api/v1/documents/{document_id}/profile").status_code == 404
+    assert client.post(f"/api/v1/documents/{document_id}/analyze").status_code == 200
+    profile = client.get(f"/api/v1/documents/{document_id}/profile")
+    assert profile.status_code == 200
+    assert profile.json()["page_count"] == 1
+
+    assert client.get(f"/api/v1/documents/{document_id}/job").status_code == 404
+    client.post(f"/api/v1/documents/{document_id}/convert", json={"ocr": False})
+    job = client.get(f"/api/v1/documents/{document_id}/job")
+    assert job.status_code == 200
+    assert job.json()["document_id"] == document_id
+
+    page = client.get(f"/api/v1/documents/{document_id}/source/pages/1.png")
+    assert page.status_code == 200
+    assert page.headers["content-type"] == "image/png"
+    assert page.content[:4] == b"\x89PNG"
+    assert client.get(
+        f"/api/v1/documents/{document_id}/source/pages/99.png"
+    ).status_code == 404
+    assert client.get(
+        f"/api/v1/documents/{document_id}/source/pages/0.png"
+    ).status_code == 422
+
+
+def test_unknown_document_meta_404(client) -> None:
+    assert client.get("/api/v1/documents/nope").status_code == 404
+
+
 # --- Conversion lifecycle (M7-03, M7-04, M7-05, M7-07) ---------------------------------
 
 
@@ -167,9 +206,11 @@ def test_export_epub_returns_valid_package(client, fixtures_dir) -> None:
     archive = zipfile.ZipFile(io.BytesIO(data))
     assert archive.namelist()[0] == "mimetype"
 
-    # second export serves the stored package
+    # export always re-renders from the stored ReflowDoc, so repeated calls
+    # are both valid EPUBs (byte equality is not expected: zip timestamps differ)
     again = client.post(f"/api/v1/documents/{meta['id']}/export/epub")
-    assert again.content == data
+    assert again.status_code == 200
+    assert again.content[:2] == b"PK"
 
 
 def test_scanned_document_converts_to_empty_document(client, fixtures_dir) -> None:

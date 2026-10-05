@@ -8,3 +8,17 @@
 body {
   @apply bg-white text-neutral-900 antialiased;
 }
+
+/* Reflow preview: book-like reading surface, RTL slightly larger. */
+.reflow-preview {
+  font-family: Georgia, "Times New Roman", serif;
+}
+
+.reflow-preview [dir="rtl"] {
+  font-size: 1.25em;
+  line-height: 1.9;
+}
+
+.reflow-preview blockquote {
+  margin: 0.75em 1.5em;
+}

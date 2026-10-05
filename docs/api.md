@@ -22,6 +22,10 @@ MVP storage is the temporary filesystem, no database (ARCHITECTURE.md 8):
 | POST | `/api/v1/documents/{id}/export/epub` | M7-07 | Validated EPUB 3 bytes; re-renders from the current ReflowDoc so user edits are included |
 | GET | `/api/v1/documents/{id}/report` | — | Quality report: profile, Arabic integrity rollup, warnings |
 | GET | `/api/v1/health` | — | Liveness |
+| GET | `/api/v1/documents/{id}` | M8 | Document metadata |
+| GET | `/api/v1/documents/{id}/profile` | M8 | Stored analyzer profile (404 before analysis) |
+| GET | `/api/v1/documents/{id}/job` | M8 | Latest conversion job for the document |
+| GET | `/api/v1/documents/{id}/source/pages/{n}.png` | M8 | Page raster for the source-vs-output review pane |
 
 ## Lifecycle
 

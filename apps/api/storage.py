@@ -46,6 +46,9 @@ class DocumentStore:
         self.documents_dir = self.root / "documents"
         self.documents_dir.mkdir(parents=True, exist_ok=True)
 
+    def doc_dir(self, document_id: str) -> Path:
+        return self.documents_dir / document_id
+
     def _doc_dir(self, document_id: str) -> Path:
         return self.documents_dir / document_id
 
