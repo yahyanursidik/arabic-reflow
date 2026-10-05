@@ -48,6 +48,9 @@ export function BlockInspector({
   selectedId,
   onSelect,
   onSave,
+  onRenderImage,
+  onRestoreText,
+  onNormalizeArabic,
 }: {
   blocks: UiBlock[];
   report: UiReport | null;
@@ -58,9 +61,13 @@ export function BlockInspector({
     blockId: string,
     update: { text?: string; lang?: string; dir?: string },
   ) => Promise<void>;
+  onRenderImage: (blockId: string) => Promise<void>;
+  onRestoreText: (blockId: string) => Promise<void>;
+  onNormalizeArabic: (blockId: string) => Promise<void>;
 }) {
   const [filter, setFilter] = useState<Filter>("all");
   const [saving, setSaving] = useState(false);
+  const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   const selected = useMemo(
@@ -102,6 +109,24 @@ export function BlockInspector({
   }
 
   const lowConfidence = new Set(report?.integrity?.lowConfidenceBlockIds ?? []);
+  const hasArabic =
+    selected !== null && /[\u0600-\u06FF\uFB50-\uFEFF]/.test(selected.text);
+  const renderedAsImage =
+    selected !== null &&
+    selected.type === "image" &&
+    selected.warnings.includes("ARABIC_RENDERED_AS_IMAGE");
+
+  async function runAction(action: () => Promise<void>) {
+    setActing(true);
+    setError(null);
+    try {
+      await action();
+    } catch (cause) {
+      setError(cause instanceof Error ? cause.message : "aksi gagal");
+    } finally {
+      setActing(false);
+    }
+  }
 
   return (
     <div className="flex max-h-[70vh] flex-col rounded-card border border-black/8 bg-pure-white text-sm">
@@ -197,6 +222,60 @@ export function BlockInspector({
             <p className="rounded-small bg-paper-warmth px-2 py-1 text-xs text-vermillion">
               {selected.warnings.join(", ")}
             </p>
+          ) : null}
+
+          {renderedAsImage ? (
+            <div className="space-y-2">
+              <p className="text-xs text-graphite">
+                Blok ini dirender sebagai gambar dari halaman sumber (piksel
+                apa adanya). Teks asli tersimpan dan bisa dikembalikan.
+              </p>
+              <button
+                className="rounded-button bg-sky-tint px-3 py-1.5 text-xs font-medium text-notion-blue hover:opacity-80 disabled:opacity-40"
+                disabled={acting}
+                onClick={() => void runAction(() => onRestoreText(selected.id))}
+                type="button"
+              >
+                Kembalikan ke teks
+              </button>
+            </div>
+          ) : null}
+
+          {hasArabic && ["paragraph", "heading", "quote"].includes(selected.type) ? (
+            <div className="space-y-2 rounded-small border border-black/8 bg-paper-warmth p-3">
+              <p className="text-xs text-graphite">
+                Perbaikan Arab (eksplisit, bisa dibatalkan):
+              </p>
+              <div className="flex flex-wrap gap-2">
+                <button
+                  className="rounded-button bg-sky-tint px-3 py-1.5 text-xs font-medium text-notion-blue hover:opacity-80 disabled:opacity-40"
+                  disabled={acting}
+                  onClick={() =>
+                    void runAction(() => onNormalizeArabic(selected.id))
+                  }
+                  type="button"
+                  title="Lipat presentation forms ke huruf inti; harakat tetap utuh, teks asli disimpan"
+                >
+                  Normalisasi Arab (NFKC)
+                </button>
+                <button
+                  className="rounded-button bg-sky-tint px-3 py-1.5 text-xs font-medium text-notion-blue hover:opacity-80 disabled:opacity-40"
+                  disabled={acting}
+                  onClick={() =>
+                    void runAction(() => onRenderImage(selected.id))
+                  }
+                  type="button"
+                  title="Potong region ini dari halaman sumber menjadi gambar — piksel tidak berubah"
+                >
+                  Render sebagai gambar
+                </button>
+              </div>
+              <p className="text-[11px] text-stone">
+                Normalisasi menjaga teks tetap reflowable dan bisa dicari;
+                render sebagai gambar mempertahankan tampilan persis tetapi
+                teksnya tidak bisa dicari.
+              </p>
+            </div>
           ) : null}
 
           {["paragraph", "heading", "quote"].includes(selected.type) ? (

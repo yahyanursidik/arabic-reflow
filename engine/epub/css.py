@@ -26,6 +26,15 @@ blockquote {
   margin: 0.8em 1.2em;
 }
 
+figure {
+  margin: 0.8em 0;
+}
+
+figure img {
+  max-width: 100%;
+  height: auto;
+}
+
 /* Arabic blocks and quotes: embedded Arabic font, slightly larger */
 p.arabic, blockquote.arabic, [dir="rtl"] {
   font-family: "FiraGO", "Arabic Typesetting", serif;

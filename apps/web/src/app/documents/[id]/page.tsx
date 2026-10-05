@@ -125,6 +125,21 @@ export default function DocumentWorkspace() {
     await loadResults();
   }
 
+  async function renderBlockImage(blockId: string) {
+    await api.renderBlockAsImage(documentId, blockId);
+    await loadResults();
+  }
+
+  async function restoreBlockText(blockId: string) {
+    await api.restoreBlockText(documentId, blockId);
+    await loadResults();
+  }
+
+  async function normalizeBlockArabic(blockId: string) {
+    await api.normalizeBlockArabic(documentId, blockId);
+    await loadResults();
+  }
+
   if (loadError) {
     return (
       <main className="mx-auto max-w-2xl px-6 py-24">
@@ -243,6 +258,9 @@ export default function DocumentWorkspace() {
             <section>
               <BlockInspector
                 blocks={reflow.blocks}
+                onNormalizeArabic={normalizeBlockArabic}
+                onRenderImage={renderBlockImage}
+                onRestoreText={restoreBlockText}
                 onSelect={setSelectedId}
                 onSave={saveBlock}
                 reflow={reflow}

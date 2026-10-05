@@ -137,3 +137,28 @@ class DocumentStore:
 
     def read_job(self, document_id: str) -> dict | None:
         return self._read_json(document_id, "job.json")
+
+    # --- per-block originals (render-as-image undo store) -------------------
+
+    def _originals_path(self, document_id: str) -> Path:
+        return self._doc_dir(document_id) / "originals.json"
+
+    def write_original_block(self, document_id: str, block_id: str, record: dict) -> None:
+        originals = self.read_originals(document_id)
+        originals[block_id] = record
+        self._originals_path(document_id).write_text(
+            json.dumps(originals, ensure_ascii=False, indent=2), "utf-8"
+        )
+
+    def read_originals(self, document_id: str) -> dict:
+        return self._read_json(document_id, "originals.json") or {}
+
+    def read_original_block(self, document_id: str, block_id: str) -> dict | None:
+        return self.read_originals(document_id).get(block_id)
+
+    def delete_original_block(self, document_id: str, block_id: str) -> None:
+        originals = self.read_originals(document_id)
+        originals.pop(block_id, None)
+        self._originals_path(document_id).write_text(
+            json.dumps(originals, ensure_ascii=False, indent=2), "utf-8"
+        )

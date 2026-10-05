@@ -230,7 +230,7 @@ def create_app(storage_dir: Path | None = None) -> FastAPI:
             filename=filename,
         )
 
-    # ---- review (M7-06) ----------------------------------------------------------------
+    # ---- review (M7-06 + per-block Arabic repair) --------------------------------
 
     @app.patch("/api/v1/documents/{document_id}/blocks/{block_id}")
     def update_block(document_id: str, block_id: str, update: BlockUpdate) -> dict:
@@ -272,6 +272,59 @@ def create_app(storage_dir: Path | None = None) -> FastAPI:
 
         storage.write_reflow(document_id, document)
         return block.model_dump()
+
+    @app.post("/api/v1/documents/{document_id}/blocks/{block_id}/render-image")
+    def render_block_image(document_id: str, block_id: str) -> dict:
+        """Swap an Arabic text block for a pixel-perfect crop of the source
+        page (explicit user repair, reversible via restore-text)."""
+        _require_document(document_id)
+        if storage.read_reflow(document_id) is None:
+            raise HTTPException(
+                status_code=404, detail="document has not been converted yet"
+            )
+        from apps.api import blocks as block_actions
+
+        try:
+            image_block = block_actions.render_block_as_image(
+                storage, document_id, block_id
+            )
+        except block_actions.BlockNotFound:
+            raise HTTPException(status_code=404, detail="block not found")
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        return image_block.model_dump()
+
+    @app.post("/api/v1/documents/{document_id}/blocks/{block_id}/restore-text")
+    def restore_block_text(document_id: str, block_id: str) -> dict:
+        _require_document(document_id)
+        from apps.api import blocks as block_actions
+
+        try:
+            restored = block_actions.restore_block_text(storage, document_id, block_id)
+        except block_actions.BlockNotFound:
+            raise HTTPException(status_code=404, detail="block not found")
+        except block_actions.NoOriginalStored:
+            raise HTTPException(
+                status_code=404, detail="no pre-render original stored for this block"
+            )
+        return restored.model_dump()
+
+    @app.post("/api/v1/documents/{document_id}/blocks/{block_id}/normalize-arabic")
+    def normalize_block_arabic(document_id: str, block_id: str) -> dict:
+        """NFKC-fold presentation forms to core letters; harakat preserved,
+        original kept in source_text (explicit user action)."""
+        _require_document(document_id)
+        from apps.api import blocks as block_actions
+
+        try:
+            normalized = block_actions.normalize_block_arabic(
+                storage, document_id, block_id
+            )
+        except block_actions.BlockNotFound:
+            raise HTTPException(status_code=404, detail="block not found")
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
+        return normalized.model_dump()
 
     # ---- helpers -------------------------------------------------------------------------
 

@@ -85,3 +85,12 @@ body {
 .reflow-preview blockquote {
   margin: 0.75em 1.5em;
 }
+
+.reflow-preview figure {
+  margin: 0.75em 0;
+}
+
+.reflow-preview img {
+  max-width: 100%;
+  height: auto;
+}

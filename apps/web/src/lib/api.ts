@@ -134,6 +134,54 @@ export const api = {
     );
   },
 
+  async renderBlockAsImage(id: string, blockId: string): Promise<UiBlock> {
+    return request(
+      `/api/v1/documents/${id}/blocks/${blockId}/render-image`,
+      (value) => {
+        const block = parseReflow({
+          schema_version: "0.1",
+          document_id: id,
+          chapters: [{ id: "chapter-001", blocks: [value] }],
+        }).blocks[0];
+        if (!block) throw new ContractError("block", "empty response");
+        return block;
+      },
+      { method: "POST" },
+    );
+  },
+
+  async restoreBlockText(id: string, blockId: string): Promise<UiBlock> {
+    return request(
+      `/api/v1/documents/${id}/blocks/${blockId}/restore-text`,
+      (value) => {
+        const block = parseReflow({
+          schema_version: "0.1",
+          document_id: id,
+          chapters: [{ id: "chapter-001", blocks: [value] }],
+        }).blocks[0];
+        if (!block) throw new ContractError("block", "empty response");
+        return block;
+      },
+      { method: "POST" },
+    );
+  },
+
+  async normalizeBlockArabic(id: string, blockId: string): Promise<UiBlock> {
+    return request(
+      `/api/v1/documents/${id}/blocks/${blockId}/normalize-arabic`,
+      (value) => {
+        const block = parseReflow({
+          schema_version: "0.1",
+          document_id: id,
+          chapters: [{ id: "chapter-001", blocks: [value] }],
+        }).blocks[0];
+        if (!block) throw new ContractError("block", "empty response");
+        return block;
+      },
+      { method: "POST" },
+    );
+  },
+
   exportEpubUrl(id: string): string {
     return `${API_BASE}/api/v1/documents/${id}/export/epub`;
   },

@@ -2,6 +2,7 @@
 
 from __future__ import annotations
 
+import base64
 import io
 import zipfile
 from pathlib import Path
@@ -227,6 +228,117 @@ def test_conversion_persists_documents_with_binary_resources(client, fixtures_di
     export = client.post(f"/api/v1/documents/{meta['id']}/export/epub")
     assert export.status_code == 200
     assert export.content[:2] == b"PK"
+
+
+# --- Per-block Arabic repair (render-image / restore / normalize) -----------------
+
+
+def _reflow_block_text(block: dict) -> str:
+    if block["type"] == "paragraph":
+        return "".join(node["text"] for node in block.get("content", []))
+    return block.get("text", "")
+
+
+def test_render_block_as_image_is_reversible(client, fixtures_dir) -> None:
+    meta, job = _convert_and_wait(client, fixtures_dir, "arabic-native.pdf")
+    assert job["status"] == "completed", job
+    reflow = client.get(f"/api/v1/documents/{meta['id']}/reflow").json()
+    paragraph = next(
+        b for b in reflow["chapters"][0]["blocks"]
+        if b["type"] == "paragraph"
+        and any(
+            "\u0600" <= ch <= "\u06FF" or "\uFB50" <= ch <= "\uFEFF"
+            for ch in _reflow_block_text(b)
+        )
+    )
+    original_text = _reflow_block_text(paragraph)
+
+    rendered = client.post(
+        f"/api/v1/documents/{meta['id']}/blocks/{paragraph['id']}/render-image"
+    )
+    assert rendered.status_code == 200
+    block = rendered.json()
+    assert block["type"] == "image"
+    assert "ARABIC_RENDERED_AS_IMAGE" in block["warnings"]
+    assert block["modified_by_user"] is True
+    resource = next(
+        r for r in client.get(f"/api/v1/documents/{meta['id']}/reflow").json()["resources"]
+        if r["id"] == block["resource_id"]
+    )
+    assert base64.b64decode(resource["content"])[:4] == b"\x89PNG"
+
+    restored = client.post(
+        f"/api/v1/documents/{meta['id']}/blocks/{paragraph['id']}/restore-text"
+    )
+    assert restored.status_code == 200
+    back = restored.json()
+    assert back["type"] == "paragraph"
+    assert _reflow_block_text(back) == original_text
+    assert "ARABIC_RENDERED_AS_IMAGE" not in back["warnings"]
+
+    # the render resource is cleaned up and restore is no longer possible
+    remaining = [
+        r for r in client.get(f"/api/v1/documents/{meta['id']}/reflow").json()["resources"]
+        if r["id"] == block["resource_id"]
+    ]
+    assert remaining == []
+    assert client.post(
+        f"/api/v1/documents/{meta['id']}/blocks/{paragraph['id']}/restore-text"
+    ).status_code == 404
+
+
+def test_normalize_arabic_folds_presentation_forms_keeps_harakat(
+    client, fixtures_dir
+) -> None:
+    meta, job = _convert_and_wait(client, fixtures_dir, "arabic-native.pdf")
+    assert job["status"] == "completed", job
+    reflow = client.get(f"/api/v1/documents/{meta['id']}/reflow").json()
+    paragraph = next(
+        b for b in reflow["chapters"][0]["blocks"]
+        if b["type"] == "paragraph"
+        and any("\uFB50" <= ch <= "\uFEFF" for ch in _reflow_block_text(b))
+    )
+    harakat_before = sum(
+        1 for ch in _reflow_block_text(paragraph) if "\u064B" <= ch <= "\u065F"
+    )
+
+    response = client.post(
+        f"/api/v1/documents/{meta['id']}/blocks/{paragraph['id']}/normalize-arabic"
+    )
+    assert response.status_code == 200
+    normalized = response.json()
+    assert normalized["modified_by_user"] is True
+    text = "".join(node["text"] for node in normalized["content"])
+    assert not any("\uFB50" <= ch <= "\uFEFF" for ch in text), (
+        "presentation forms must be folded to core letters"
+    )
+    harakat_after = sum(1 for ch in text if "\u064B" <= ch <= "\u065F")
+    assert harakat_after == harakat_before, "harakat must survive normalization"
+    provenance = [n for n in normalized["content"] if n.get("source_text")]
+    assert provenance, "original text kept in source_text"
+    assert any(
+        "arabic_nfkc_normalization" in n.get("transformations", [])
+        for n in normalized["content"]
+    )
+
+
+def test_normalize_folds_latin_ligatures_too(client, fixtures_dir) -> None:
+    """NFKC also repairs Latin extraction artifacts: the 'ﬁ' ligature in
+    'ﬁkih' folds to plain 'fi'. The block is marked user-modified."""
+    meta, _ = _convert_and_wait(client, fixtures_dir, "indonesian-native.pdf")
+    reflow = client.get(f"/api/v1/documents/{meta['id']}/reflow").json()
+    paragraph = next(
+        b for b in reflow["chapters"][0]["blocks"]
+        if b["type"] == "paragraph" and "\ufb01" in _reflow_block_text(b)
+    )
+    response = client.post(
+        f"/api/v1/documents/{meta['id']}/blocks/{paragraph['id']}/normalize-arabic"
+    )
+    assert response.status_code == 200
+    normalized = response.json()
+    assert "\ufb01" not in _reflow_block_text(normalized)
+    assert "fikih" in _reflow_block_text(normalized)
+    assert normalized["modified_by_user"] is True
 
 
 def test_scanned_document_converts_to_empty_document(client, fixtures_dir) -> None:
