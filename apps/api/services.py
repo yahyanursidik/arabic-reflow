@@ -34,6 +34,22 @@ def build_report(profile, document) -> dict:
     }
 
 
+def _pick_ocr_engine(explicit: str | None):
+    """Resolve the OCR engine: explicit name, else the first available one."""
+    from engine.ocr.base import OcrEngineUnavailable
+    from engine.ocr.engines import available_engines, get_engine
+
+    if explicit:
+        return get_engine(explicit)
+    available = available_engines()
+    if not available:
+        raise OcrEngineUnavailable(
+            "no OCR engine is installed; install \".[ocr-paddle]\" (preferred) or "
+            "\".[ocr-tesseract]\" plus the tesseract binary and language data"
+        )
+    return get_engine(available[0])
+
+
 def run_conversion(
     storage: DocumentStore,
     jobs: JobStore,
@@ -41,6 +57,7 @@ def run_conversion(
     document_id: str,
     *,
     ocr: bool = False,
+    ocr_engine_name: str | None = None,
 ) -> None:
     """Execute the full pipeline, updating the job at every stage."""
     jobs.update(job_id, status="processing", stage="analyzing", progress=5)
@@ -55,7 +72,7 @@ def run_conversion(
         ocr_report = None
         if ocr:
             jobs.update(job_id, stage="ocr", progress=35)
-            engine = get_engine("paddle")
+            engine = _pick_ocr_engine(ocr_engine_name)
             raw, ocr_report = apply_ocr(source, profile, raw, engine)
 
         jobs.update(job_id, stage="layout", progress=50)

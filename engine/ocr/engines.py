@@ -98,12 +98,20 @@ class PaddleOcrEngine:
 
 @register("tesseract")
 class TesseractOcrEngine:
-    """Tesseract adapter (M5-03, P2). Requires `pip install .[ocr-tesseract]`
-    plus the tesseract binary with the desired language packs."""
+    """Tesseract adapter (M5-03, P2). Requires `pip install ".[ocr-tesseract]"`
+    plus the tesseract binary with the desired language packs.
+
+    Optional environment variables:
+    - TESSERACT_CMD: full path to the tesseract binary when it is not on PATH;
+    - TESSDATA_PREFIX: directory containing *.traineddata when the default
+      install location is not writable (the binary reads this itself).
+    """
 
     name = "tesseract"
 
     def __init__(self, languages: list[str] | None = None, **_) -> None:
+        import os
+
         try:
             import pytesseract  # noqa: F401
         except ImportError as exc:
@@ -111,7 +119,11 @@ class TesseractOcrEngine:
                 "pytesseract is not installed; install with: pip install \".[ocr-tesseract]\" "
                 "and ensure the tesseract binary (with ara/ind language data) is on PATH"
             ) from exc
-        self._languages = languages or ["ara+ind+eng"]
+        tesseract_cmd = os.environ.get("TESSERACT_CMD")
+        if tesseract_cmd:
+            pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
+        # pytesseract expects the language pack list as one '+'-joined string.
+        self._languages = "+".join(languages) if languages else "ara+ind+eng"
 
     def recognize(self, image: bytes, languages: list[str] | None = None) -> "OcrPage":
         import io

@@ -28,7 +28,11 @@ PDF_MAGIC = b"%PDF-"
 class ConvertRequest(BaseModel):
     ocr: bool = Field(
         default=False,
-        description="Run the OCR stage for scanned pages (requires the paddle extra)",
+        description="Run the OCR stage for scanned pages (requires an OCR extra)",
+    )
+    engine: str | None = Field(
+        default=None,
+        description="OCR engine name (paddle | tesseract); default: first available",
     )
 
 
@@ -163,6 +167,7 @@ def create_app(storage_dir: Path | None = None) -> FastAPI:
                 "job_id": job.id,
                 "document_id": document_id,
                 "ocr": request.ocr,
+                "ocr_engine_name": request.engine,
             },
             daemon=True,
             name=f"convert-{document_id}",
