@@ -1,1 +1,2 @@
-"""Semantic reconstruction: primitives -> ReflowDoc blocks (Milestone 2). Not implemented yet."""
+"""Semantic reconstruction: ordered raw primitives -> ReflowDoc blocks
+(paragraphs, headings; Milestone 2)."""

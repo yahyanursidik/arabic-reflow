@@ -20,6 +20,7 @@ from engine.analyzer.models import (
     DocumentProfile,
     PageProfile,
 )
+from engine.layout.columns import find_gutter
 
 # A page counts as having a text layer above this many extracted characters.
 MIN_TEXT_CHARS = 20
@@ -89,22 +90,10 @@ def _likely_multicolumn(page: pymupdf.Page) -> bool:
     """Cheap gutter probe: is there a vertical strip splitting text blocks into
     two non-trivial sides with almost nothing crossing it? Real column
     detection arrives with the layout engine (M6-01); this only flags 'likely'."""
-    blocks = [
-        pymupdf.Rect(b["bbox"]) for b in page.get_text("dict")["blocks"] if b.get("type") == 0
+    bboxes = [
+        tuple(b["bbox"]) for b in page.get_text("dict")["blocks"] if b.get("type") == 0
     ]
-    if len(blocks) < 4:
-        return False
-
-    width = page.rect.width
-    best = False
-    for fraction in (0.35, 0.40, 0.45, 0.50, 0.55, 0.60, 0.65):
-        x = width * fraction
-        left = [b for b in blocks if b.x1 < x - 3]
-        right = [b for b in blocks if b.x0 > x + 3]
-        crossing = len(blocks) - len(left) - len(right)
-        if len(left) >= 2 and len(right) >= 2 and crossing <= max(1, len(blocks) // 10):
-            best = True
-    return best
+    return find_gutter(bboxes, page.rect.width) is not None
 
 
 def analyze(source: Path | bytes | str) -> DocumentProfile:

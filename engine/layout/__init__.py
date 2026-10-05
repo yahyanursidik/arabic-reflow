@@ -1,1 +1,2 @@
-"""Layout analysis: regions, columns, zoning (Milestones 2/6). Not implemented yet."""
+"""Layout analysis: furniture (header/footer/page numbers), column gutters,
+and reading order (Milestones 2 and 6)."""

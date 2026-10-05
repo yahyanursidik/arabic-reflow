@@ -6,6 +6,8 @@ The extractor is pure observation: it preserves what PyMuPDF reports
 
 from __future__ import annotations
 
+from pathlib import Path
+
 import pymupdf
 
 from engine.extraction.models import RawBlock, RawDocument, RawImage, RawLine, RawPage, RawSpan
@@ -76,7 +78,9 @@ def extract(source: str | bytes) -> RawDocument:
         return RawDocument(
             page_count=len(pages),
             pages=pages,
-            source_filename=doc.name if isinstance(source, str) else None,
+            source_filename=(
+                Path(doc.name).name if not isinstance(source, bytes) else None
+            ),
         )
     finally:
         doc.close()

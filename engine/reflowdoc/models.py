@@ -154,6 +154,11 @@ class ParagraphBlock(BlockBase):
     type: Literal["paragraph"] = "paragraph"
     content: list[ContentNode] = Field(min_length=1)
 
+    @property
+    def text(self) -> str:
+        """Convenience view of the paragraph's text (content nodes joined)."""
+        return "".join(node.text for node in self.content)
+
 
 class QuoteBlock(BlockBase):
     type: Literal["quote"] = "quote"
