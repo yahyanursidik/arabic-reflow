@@ -15,12 +15,15 @@ Filenames are sanitized at the boundary; document contents are never logged.
 
 from __future__ import annotations
 
+import base64
 import json
 import re
 import shutil
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
+
+from pydantic import BaseModel
 
 from engine.analyzer.models import DocumentProfile
 from engine.reflowdoc.models import ReflowDocument
@@ -38,6 +41,13 @@ def sanitize_filename(name: str | None) -> str:
 
 def utc_now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
+
+
+def _json_default(obj):
+    """Last-resort JSON encoding for bytes in hand-built dicts."""
+    if isinstance(obj, bytes):
+        return base64.b64encode(obj).decode("ascii")
+    raise TypeError(f"Object of type {type(obj).__name__} is not JSON serializable")
 
 
 class DocumentStore:
@@ -81,9 +91,14 @@ class DocumentStore:
         return self._doc_dir(document_id) / "source.pdf"
 
     def _write_json(self, document_id: str, name: str, payload) -> None:
+        if isinstance(payload, BaseModel):
+            # mode="json" applies field serializers (bytes -> base64) so binary
+            # resources survive persistence.
+            payload = payload.model_dump(mode="json")
         target = self._doc_dir(document_id) / name
         target.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2), "utf-8"
+            json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default),
+            "utf-8",
         )
 
     def _read_json(self, document_id: str, name: str):

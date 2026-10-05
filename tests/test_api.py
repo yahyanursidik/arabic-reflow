@@ -213,6 +213,22 @@ def test_export_epub_returns_valid_package(client, fixtures_dir) -> None:
     assert again.content[:2] == b"PK"
 
 
+def test_conversion_persists_documents_with_binary_resources(client, fixtures_dir) -> None:
+    """Regression: documents with embedded images must survive JSON storage."""
+    import base64
+
+    meta, job = _convert_and_wait(client, fixtures_dir, "image-caption.pdf")
+    assert job["status"] == "completed", job
+    reflow = client.get(f"/api/v1/documents/{meta['id']}/reflow").json()
+    resources = [r for r in reflow.get("resources", []) if r.get("content")]
+    assert resources, "image resource persisted as base64"
+    raw = base64.b64decode(resources[0]["content"])
+    assert raw[:4] == b"\x89PNG"
+    export = client.post(f"/api/v1/documents/{meta['id']}/export/epub")
+    assert export.status_code == 200
+    assert export.content[:2] == b"PK"
+
+
 def test_scanned_document_converts_to_empty_document(client, fixtures_dir) -> None:
     meta, job = _convert_and_wait(client, fixtures_dir, "scanned.pdf")
     assert job["status"] == "completed"
