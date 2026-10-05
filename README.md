@@ -644,9 +644,30 @@ result, data, report = build_epub("book.pdf")   # ReflowDoc + validated EPUB 3
 open("book.epub", "wb").write(data)
 ```
 
+### Command line
+
+```bash
+reflow analyze book.pdf                 # pages, classification, Arabic presence
+reflow convert book.pdf -o book.epub    # validated EPUB 3 (add --ocr for scans)
+```
+
+### HTTP API
+
+```bash
+uvicorn apps.api.main:app --reload      # http://localhost:8000/docs
+```
+
+```bash
+curl -F "file=@book.pdf" localhost:8000/api/v1/documents
+curl -X POST localhost:8000/api/v1/documents/{id}/convert
+curl localhost:8000/api/v1/jobs/{job_id}
+curl -X POST localhost:8000/api/v1/documents/{id}/export/epub -o book.epub
+```
+
 See `docs/` for the reconstruction heuristics (`docs/reconstruction.md`),
 the Arabic integrity engine (`docs/arabic-integrity.md`), the EPUB rendering
-contract (`docs/epub.md`), and the fixture corpus (`docs/fixtures.md`).
+contract (`docs/epub.md`), the OCR layer (`docs/ocr.md`), the HTTP API
+(`docs/api.md`), and the fixture corpus (`docs/fixtures.md`).
 
 ### Repository layout
 

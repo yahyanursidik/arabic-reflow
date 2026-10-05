@@ -146,7 +146,11 @@ def chapter_xhtml(document: ReflowDocument, chapter: Chapter) -> str:
     lang = primary_language(document)
     dir_ = primary_direction(document)
     title = escape(chapter.title or document.metadata.title or "Untitled")
-    body = "\n".join(_render_block(b, document) for b in chapter.blocks)
+    body = "\n".join(_render_block(b, document) for b in chapter.blocks).strip()
+    if not body:
+        # ebooklib's nav generation crashes on an empty <body>; give empty
+        # documents (e.g. scanned input without OCR) a harmless placeholder.
+        body = '<p class="empty">\u00a0</p>'
     return (
         '<?xml version="1.0" encoding="utf-8"?>\n'
         "<!DOCTYPE html>\n"
