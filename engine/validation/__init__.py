@@ -1,1 +1,1 @@
-"""ReflowDoc and EPUB validation. Not implemented yet."""
+"""Output validation (ReflowDoc, EPUB)."""

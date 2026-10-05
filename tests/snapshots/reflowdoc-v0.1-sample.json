@@ -38,6 +38,7 @@
           "confidence": 0.98,
           "warnings": [],
           "modified_by_user": false,
+          "arabic_integrity": null,
           "type": "paragraph",
           "content": [
             {
@@ -73,6 +74,7 @@
           "confidence": 0.99,
           "warnings": [],
           "modified_by_user": false,
+          "arabic_integrity": null,
           "type": "quote",
           "subtype": "arabic",
           "text": "إِنَّمَا الْأَعْمَالُ بِالنِّيَّاتِ",

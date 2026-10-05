@@ -200,4 +200,7 @@ def reconstruct_semantics(
                 source_page=page,
             )
         )
-    return doc
+
+    from engine.arabic.report import attach_integrity
+
+    return attach_integrity(doc)

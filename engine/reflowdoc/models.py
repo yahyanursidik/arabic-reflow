@@ -140,6 +140,10 @@ class BlockBase(BaseModel):
         default=False,
         description="True only when a human explicitly edited the content",
     )
+    arabic_integrity: ArabicIntegrity | None = Field(
+        default=None,
+        description="Arabic diagnostic metadata when the block carries Arabic",
+    )
 
 
 class HeadingBlock(BlockBase):

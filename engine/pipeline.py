@@ -74,3 +74,18 @@ def build_reflowdoc(source: str | bytes) -> ReconstructionResult:
         layout=layout_report,
         order=order_report,
     )
+
+
+def build_epub(source: str | bytes, *, embed_arabic_font: bool | None = None):
+    """PDF in, validated EPUB 3 out (M4 export gate).
+
+    Raises engine.validation.epub.EPUBValidationError when the package has
+    severe structural problems.
+    """
+    from engine.epub.renderer import render_epub
+    from engine.validation.epub import assert_valid
+
+    result = build_reflowdoc(source)
+    data = render_epub(result.document, embed_arabic_font=embed_arabic_font)
+    report = assert_valid(data)
+    return result, data, report

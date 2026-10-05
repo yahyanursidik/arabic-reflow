@@ -267,6 +267,18 @@
           "title": "Modified By User",
           "type": "boolean"
         },
+        "arabic_integrity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ArabicIntegrity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Arabic diagnostic metadata when the block carries Arabic"
+        },
         "type": {
           "const": "footnote",
           "default": "footnote",
@@ -401,6 +413,18 @@
           "title": "Modified By User",
           "type": "boolean"
         },
+        "arabic_integrity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ArabicIntegrity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Arabic diagnostic metadata when the block carries Arabic"
+        },
         "type": {
           "const": "heading",
           "default": "heading",
@@ -516,6 +540,18 @@
           "title": "Modified By User",
           "type": "boolean"
         },
+        "arabic_integrity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ArabicIntegrity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Arabic diagnostic metadata when the block carries Arabic"
+        },
         "type": {
           "const": "image",
           "default": "image",
@@ -628,6 +664,18 @@
           "description": "True only when a human explicitly edited the content",
           "title": "Modified By User",
           "type": "boolean"
+        },
+        "arabic_integrity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ArabicIntegrity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Arabic diagnostic metadata when the block carries Arabic"
         },
         "type": {
           "const": "list",
@@ -776,6 +824,18 @@
           "title": "Modified By User",
           "type": "boolean"
         },
+        "arabic_integrity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ArabicIntegrity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Arabic diagnostic metadata when the block carries Arabic"
+        },
         "type": {
           "const": "page_break",
           "default": "page_break",
@@ -859,6 +919,18 @@
           "description": "True only when a human explicitly edited the content",
           "title": "Modified By User",
           "type": "boolean"
+        },
+        "arabic_integrity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ArabicIntegrity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Arabic diagnostic metadata when the block carries Arabic"
         },
         "type": {
           "const": "paragraph",
@@ -966,6 +1038,18 @@
           "description": "True only when a human explicitly edited the content",
           "title": "Modified By User",
           "type": "boolean"
+        },
+        "arabic_integrity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ArabicIntegrity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Arabic diagnostic metadata when the block carries Arabic"
         },
         "type": {
           "const": "quote",
@@ -1308,6 +1392,18 @@
           "description": "True only when a human explicitly edited the content",
           "title": "Modified By User",
           "type": "boolean"
+        },
+        "arabic_integrity": {
+          "anyOf": [
+            {
+              "$ref": "#/$defs/ArabicIntegrity"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Arabic diagnostic metadata when the block carries Arabic"
         },
         "type": {
           "const": "table",

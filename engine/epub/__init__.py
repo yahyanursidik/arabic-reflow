@@ -1,1 +1,1 @@
-"""EPUB 3 renderer (Milestone 4). Not implemented yet."""
+"""EPUB 3 renderer: ReflowDoc -> semantic XHTML -> packaged EPUB (Milestone 4)."""

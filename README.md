@@ -635,6 +635,19 @@ npm run dev
 docker compose up    # api on :8000, web on :3000
 ```
 
+### PDF to EPUB in three lines
+
+```python
+from engine.pipeline import build_epub
+
+result, data, report = build_epub("book.pdf")   # ReflowDoc + validated EPUB 3
+open("book.epub", "wb").write(data)
+```
+
+See `docs/` for the reconstruction heuristics (`docs/reconstruction.md`),
+the Arabic integrity engine (`docs/arabic-integrity.md`), the EPUB rendering
+contract (`docs/epub.md`), and the fixture corpus (`docs/fixtures.md`).
+
 ### Repository layout
 
 ```text
