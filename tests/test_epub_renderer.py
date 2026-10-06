@@ -200,19 +200,24 @@ def test_epub_structure_and_lang_dir_preserved(fixtures_dir) -> None:
 
 
 def test_arabic_fixture_embeds_firago_font(fixtures_dir) -> None:
-    from engine.epub.css import FONT_FILENAME
-
     _, data, _ = build_epub(fixtures_dir / "arabic-native.pdf")
     archive = zipfile.ZipFile(io.BytesIO(data))
-    assert any(n.endswith(FONT_FILENAME) for n in archive.namelist())
+    font_names = [n for n in archive.namelist() if n.endswith(("FiraGO-Regular.ttf", "FiraGO-Regular.otf"))]
+    assert font_names, "Arabic fixture must embed the FiraGO font"
+    # The stylesheet must reference the font actually in the package, under
+    # its real name — epubcheck sniffs font binaries (RSC-007).
+    css = archive.read("EPUB/style.css").decode("utf-8")
+    assert font_names[0].split("/")[-1] in css
+    assert "fonts/FiraGO-Regular.ttf" not in css or font_names[0].endswith(".ttf")
 
 
 def test_latin_only_fixture_skips_font(fixtures_dir) -> None:
-    from engine.epub.css import FONT_FILENAME
-
     _, data, _ = build_epub(fixtures_dir / "indonesian-native.pdf")
     archive = zipfile.ZipFile(io.BytesIO(data))
-    assert FONT_FILENAME not in archive.namelist()
+    assert not any(n.endswith((".ttf", ".otf")) for n in archive.namelist())
+    # No font reference without the font file (epubcheck RSC-007).
+    css = archive.read("EPUB/style.css").decode("utf-8")
+    assert "FiraGO-Regular" not in css
 
 
 def test_stylesheet_carries_book_typography() -> None:

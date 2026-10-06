@@ -17,13 +17,26 @@ from ebooklib import epub
 
 from engine.arabic.unicode import is_arabic_letter
 from engine.epub.css import (
-    FONT_FILENAME,
+    FONT_FACE_CSS,
     FONT_ID,
-    FONT_MEDIA_TYPE,
     STYLESHEET,
 )
 from engine.epub.xhtml import chapter_xhtml, primary_language
 from engine.reflowdoc.models import ReflowDocument
+
+_CSS_FONT_URL = "fonts/FiraGO-Regular.ttf"
+
+
+def _font_naming(data: bytes) -> tuple[str, str]:
+    """(file name, media type) matched to the actual font binary.
+
+    pymupdf-fonts ships FiraGO as OpenType/CFF ("OTTO" magic); naming it .ttf
+    with a vnd.ms-opentype media type trips epubcheck's font sniffing
+    (RSC-007). EPUB 3.3 core media types: font/otf, font/ttf.
+    """
+    if data[:4] == b"OTTO":
+        return "fonts/FiraGO-Regular.otf", "font/otf"
+    return "fonts/FiraGO-Regular.ttf", "font/ttf"
 
 
 def _document_has_arabic(document: ReflowDocument) -> bool:
@@ -73,8 +86,10 @@ def render_epub(
     book.set_identifier(document.document_id)
     title = document.metadata.title or document.metadata.source_filename or "Untitled"
     book.set_title(title)
-    for author in document.metadata.author or ["Unknown"]:
-        book.add_author(author)
+    # Unique dc:creator ids: ebooklib's add_author stamps every creator with
+    # id="creator", which epubcheck rejects as a duplicate id (RSC-005).
+    for index, author in enumerate(document.metadata.author or ["Unknown"], start=1):
+        book.add_metadata("DC", "creator", author, {"id": f"creator-{index}"})
 
     language = primary_language(document)
     book.set_language(language)
@@ -82,9 +97,26 @@ def render_epub(
         if extra != language and extra != "unknown":
             book.add_metadata("DC", "language", extra)
 
+    if embed_arabic_font is None:
+        embed_arabic_font = _document_has_arabic(document)
+    css_text = STYLESHEET
+    if embed_arabic_font:
+        data = font_bytes if font_bytes is not None else default_arabic_font_bytes()
+        if data:
+            font_filename, font_media_type = _font_naming(data)
+            book.add_item(
+                epub.EpubItem(
+                    uid=FONT_ID,
+                    file_name=font_filename,
+                    media_type=font_media_type,
+                    content=data,
+                )
+            )
+            css_text += FONT_FACE_CSS.replace(_CSS_FONT_URL, font_filename)
+
     stylesheet = epub.EpubItem(
         uid="style", file_name="style.css", media_type="text/css",
-        content=STYLESHEET.encode("utf-8"),
+        content=css_text.encode("utf-8"),
     )
     book.add_item(stylesheet)
 
@@ -117,20 +149,6 @@ def render_epub(
                 )
             )
 
-    if embed_arabic_font is None:
-        embed_arabic_font = _document_has_arabic(document)
-    if embed_arabic_font:
-        data = font_bytes if font_bytes is not None else default_arabic_font_bytes()
-        if data:
-            book.add_item(
-                epub.EpubItem(
-                    uid=FONT_ID,
-                    file_name=FONT_FILENAME,
-                    media_type=FONT_MEDIA_TYPE,
-                    content=data,
-                )
-            )
-
     chapters = []
     for index, chapter in enumerate(document.chapters, start=1):
         file_name = f"chapter-{index:03d}.xhtml"
@@ -155,6 +173,9 @@ def render_epub(
             None,
         )
         if cover_page is not None:
+            # ebooklib defaults the cover page to is_linear=False; epubcheck
+            # then fails the package because nothing hyperlinks to it (OPF-096).
+            cover_page.is_linear = True
             spine.append(cover_page)
     book.spine = spine + chapters
 

@@ -120,7 +120,12 @@ ol, ul {
 li {
   margin-bottom: 0.3em;
 }
+"""
 
+# Appended by the renderer only when the Arabic font is actually embedded —
+# a reference without the file trips epubcheck RSC-007. The URL placeholder
+# is swapped for the real font file name at render time.
+FONT_FACE_CSS = """\
 @font-face {
   font-family: "FiraGO";
   font-weight: normal;
@@ -130,5 +135,3 @@ li {
 """
 
 FONT_ID = "font-firago"
-FONT_FILENAME = "fonts/FiraGO-Regular.ttf"
-FONT_MEDIA_TYPE = "application/vnd.ms-opentype"
