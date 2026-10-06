@@ -197,6 +197,19 @@
           ],
           "default": null,
           "title": "Source Filename"
+        },
+        "cover_resource_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Resource id of the chosen cover image (from a source page).",
+          "title": "Cover Resource Id"
         }
       },
       "title": "DocumentMetadata",

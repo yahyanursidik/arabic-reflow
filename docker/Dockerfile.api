@@ -6,7 +6,7 @@ COPY pyproject.toml README.md ./
 COPY engine ./engine
 COPY apps/api ./apps/api
 
-RUN pip install --no-cache-dir .
+RUN pip install --no-cache-dir ".[api]"
 
 EXPOSE 8000
 

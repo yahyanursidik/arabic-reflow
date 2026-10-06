@@ -46,6 +46,16 @@ class BlockUpdate(BaseModel):
     dir: str | None = Field(default=None, pattern=r"^(ltr|rtl)$")
 
 
+class MetadataUpdate(BaseModel):
+    """Book metadata edit (PRD 7 Should-Have: metadata editor)."""
+
+    title: str | None = Field(default=None, min_length=1, max_length=500)
+    author: list[str] | None = Field(default=None, max_length=10)
+
+
+COVER_RESOURCE_ID = "cover"
+
+
 def create_app(storage_dir: Path | None = None) -> FastAPI:
     storage = DocumentStore(
         storage_dir
@@ -55,7 +65,7 @@ def create_app(storage_dir: Path | None = None) -> FastAPI:
 
     app = FastAPI(
         title="Reflow API",
-        version="0.5.0",
+        version="0.7.0",
         description="Mixed Arabic-Latin PDF to reflowable EPUB 3 conversion.",
     )
     app.add_middleware(
@@ -203,6 +213,93 @@ def create_app(storage_dir: Path | None = None) -> FastAPI:
                 status_code=404, detail="document has not been converted yet"
             )
         return report
+
+    # ---- book metadata and cover (PRD 7 Should-Have) ------------------------------
+
+    @app.patch("/api/v1/documents/{document_id}/metadata")
+    def update_metadata(document_id: str, update: MetadataUpdate) -> dict:
+        """Edit book title/author (Should-Have: metadata editor)."""
+        _require_document(document_id)
+        reflow = storage.read_reflow(document_id)
+        if reflow is None:
+            raise HTTPException(
+                status_code=404, detail="document has not been converted yet"
+            )
+        from engine.reflowdoc.models import ReflowDocument
+
+        document = ReflowDocument.model_validate(reflow)
+        if update.title is not None:
+            document.metadata.title = update.title.strip()
+        if update.author is not None:
+            document.metadata.author = [a.strip() for a in update.author if a.strip()]
+        storage.write_reflow(document_id, document)
+        return {
+            "title": document.metadata.title,
+            "author": document.metadata.author,
+            "cover_resource_id": document.metadata.cover_resource_id,
+        }
+
+    @app.post("/api/v1/documents/{document_id}/cover")
+    def set_cover(document_id: str, page: int) -> dict:
+        """Choose a source page as the EPUB cover (Should-Have: cover selection)."""
+        _require_document(document_id)
+        reflow = storage.read_reflow(document_id)
+        if reflow is None:
+            raise HTTPException(
+                status_code=404, detail="document has not been converted yet"
+            )
+        if page < 1:
+            raise HTTPException(status_code=422, detail="page number starts at 1")
+        from engine.ocr.base import render_page_png
+        from engine.reflowdoc.models import ReflowDocument, Resource
+
+        source = storage.source_path(document_id)
+        try:
+            pdf = pymupdf.open(source)
+        except Exception:
+            raise HTTPException(status_code=415, detail="unreadable PDF")
+        try:
+            if page > pdf.page_count:
+                raise HTTPException(status_code=404, detail="page out of range")
+            png = render_page_png(pdf.load_page(page - 1), dpi=150)
+        finally:
+            pdf.close()
+
+        document = ReflowDocument.model_validate(reflow)
+        document.resources = [
+            r for r in document.resources if r.id != COVER_RESOURCE_ID
+        ]
+        document.resources.append(
+            Resource(
+                id=COVER_RESOURCE_ID,
+                kind="image",
+                media_type="image/png",
+                filename="cover.png",
+                source_page=page,
+                content=png,
+            )
+        )
+        document.metadata.cover_resource_id = COVER_RESOURCE_ID
+        storage.write_reflow(document_id, document)
+        return {"cover_resource_id": COVER_RESOURCE_ID, "source_page": page}
+
+    @app.delete("/api/v1/documents/{document_id}/cover")
+    def clear_cover(document_id: str) -> dict:
+        _require_document(document_id)
+        reflow = storage.read_reflow(document_id)
+        if reflow is None:
+            raise HTTPException(
+                status_code=404, detail="document has not been converted yet"
+            )
+        from engine.reflowdoc.models import ReflowDocument
+
+        document = ReflowDocument.model_validate(reflow)
+        document.resources = [
+            r for r in document.resources if r.id != COVER_RESOURCE_ID
+        ]
+        document.metadata.cover_resource_id = None
+        storage.write_reflow(document_id, document)
+        return {"cover_resource_id": None}
 
     @app.post("/api/v1/documents/{document_id}/export/epub")
     def export_epub(document_id: str) -> FileResponse:

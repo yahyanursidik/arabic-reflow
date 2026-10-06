@@ -424,3 +424,58 @@ def test_export_epub_preserves_user_edit(client, fixtures_dir) -> None:
     archive = zipfile.ZipFile(io.BytesIO(response.content))
     xhtml = next(n for n in archive.namelist() if n.endswith(".xhtml") and "chapter" in n)
     assert "Suntingan pembaca." in archive.read(xhtml).decode("utf-8")
+
+
+# --- Metadata editor + cover selection (PRD 7 Should-Have) ---------------------------
+
+
+def test_metadata_patch_updates_title_and_author(client, fixtures_dir) -> None:
+    meta, _job = _convert_and_wait(client, fixtures_dir)
+    response = client.patch(
+        f"/api/v1/documents/{meta['id']}/metadata",
+        json={"title": "Riyadhus Shalihin (Edisi Review)", "author": ["Imam Muslim", "an-Nawawi"]},
+    )
+    assert response.status_code == 200, response.text
+    assert response.json()["title"] == "Riyadhus Shalihin (Edisi Review)"
+    assert response.json()["author"] == ["Imam Muslim", "an-Nawawi"]
+    # The edit flows into the exported EPUB OPF metadata.
+    export = client.post(f"/api/v1/documents/{meta['id']}/export/epub")
+    assert export.status_code == 200
+    package = zipfile.ZipFile(io.BytesIO(export.content))
+    opf = package.read("EPUB/content.opf").decode("utf-8")
+    assert "Riyadhus Shalihin (Edisi Review)" in opf
+    assert "an-Nawawi" in opf
+
+
+def test_cover_set_and_clear_roundtrip(client, fixtures_dir) -> None:
+    meta, _job = _convert_and_wait(client, fixtures_dir, "indonesian-native.pdf")
+    document_id = meta["id"]
+    response = client.post(f"/api/v1/documents/{document_id}/cover", params={"page": 1})
+    assert response.status_code == 200, response.text
+    assert response.json()["cover_resource_id"] == "cover"
+
+    reflow = client.get(f"/api/v1/documents/{document_id}/reflow").json()
+    assert reflow["metadata"]["cover_resource_id"] == "cover"
+    cover_resource = next(r for r in reflow["resources"] if r["id"] == "cover")
+    assert cover_resource["media_type"] == "image/png"
+
+    # The exported EPUB carries a real cover page and cover metadata.
+    export = client.post(f"/api/v1/documents/{document_id}/export/epub")
+    assert export.status_code == 200
+    package = zipfile.ZipFile(io.BytesIO(export.content))
+    names = package.namelist()
+    assert any("cover" in name for name in names)
+    opf = package.read("EPUB/content.opf").decode("utf-8")
+    assert 'name="cover"' in opf
+
+    cleared = client.delete(f"/api/v1/documents/{document_id}/cover")
+    assert cleared.status_code == 200
+    reflow = client.get(f"/api/v1/documents/{document_id}/reflow").json()
+    assert reflow["metadata"]["cover_resource_id"] is None
+    assert not [r for r in reflow["resources"] if r["id"] == "cover"]
+
+
+def test_cover_rejects_out_of_range_page(client, fixtures_dir) -> None:
+    meta, _job = _convert_and_wait(client, fixtures_dir)
+    response = client.post(f"/api/v1/documents/{meta['id']}/cover", params={"page": 99})
+    assert response.status_code == 404

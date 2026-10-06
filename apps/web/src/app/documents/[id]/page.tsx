@@ -214,7 +214,13 @@ export default function DocumentWorkspace() {
             <h2 className="text-heading-sm font-semibold text-ink-black">
               Review: sumber · pratinjau · inspektur
             </h2>
-            <ExportPanel report={report} />
+            <ExportPanel
+              documentId={documentId}
+              reflow={reflow}
+              report={report}
+              profile={profile}
+              onBookChanged={loadResults}
+            />
           </div>
           <div className="mt-4 grid gap-4 lg:grid-cols-3">
             <section className="text-sm">

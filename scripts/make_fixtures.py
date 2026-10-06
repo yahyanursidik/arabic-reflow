@@ -286,6 +286,45 @@ def fixture_reversed_extraction(w: FixtureWriter) -> pymupdf.Document:
     return pymupdf.open(path)
 
 
+def fixture_table_grid(w: FixtureWriter) -> pymupdf.Document:
+    """Ruled 3x3 table: aligned short cells plus vector rule lines.
+
+    The rules are required by the conservative detector (geometry alone
+    cannot distinguish a grid from two-column prose).
+    """
+    doc = pymupdf.open()
+    page = _page(doc)
+    x0, y0 = 72.0, 120.0
+    col_width, row_height = 150.0, 30.0
+    cells = [
+        ["Nama", "Jumlah", "Keterangan"],
+        ["Kurma", "3 kg", "Untuk tamu"],
+        ["Air zamzam", "2 botol", "Dibawa pulang"],
+    ]
+    for row_index, row in enumerate(cells):
+        for col_index, text in enumerate(row):
+            rect = pymupdf.Rect(
+                x0 + col_index * col_width + 4,
+                y0 + row_index * row_height + 4,
+                x0 + (col_index + 1) * col_width - 4,
+                y0 + (row_index + 1) * row_height - 4,
+            )
+            w.insert(page, rect, text)
+    # Grid rules: horizontal row separators and vertical column separators.
+    for row_index in range(len(cells) + 1):
+        y = y0 + row_index * row_height
+        page.draw_line(pymupdf.Point(x0, y), pymupdf.Point(x0 + 3 * col_width, y))
+    for col_index in range(len(cells[0]) + 1):
+        x = x0 + col_index * col_width
+        page.draw_line(pymupdf.Point(x, y0), pymupdf.Point(x, y0 + 3 * row_height))
+    w.insert(
+        page,
+        pymupdf.Rect(72, y0 + 3 * row_height + 24, 523, y0 + 3 * row_height + 80),
+        "Tabel di atas memuat jadwal pembagian hadits kurma dan air zamzam.",
+    )
+    return doc
+
+
 def _arabic_letters(text: str) -> int:
     from engine.arabic.unicode import is_arabic_letter
     return sum(1 for ch in text if is_arabic_letter(ch))
@@ -366,6 +405,12 @@ FIXTURES: dict[str, tuple[callable, callable]] = {
         lambda t: ([] if (HADITH_NIYYAH_VOCALIZED not in t and _arabic_letters(t) > 15)
                    else ["expected reversed Arabic extraction (trap did not trap)"]),
     ),
+    "table-grid.pdf": (
+        fixture_table_grid,
+        lambda t: ([] if all(cell in t for cell in ("Nama", "Kurma", "Air zamzam",
+                                                    "Dibawa pulang"))
+                   else ["table cell text missing"]),
+    ),
 }
 
 
@@ -398,6 +443,9 @@ FIXTURE_METADATA: dict[str, dict[str, str]] = {
     },
     "reversed-extraction.pdf": {
         "title": "Uji Integritas Ekstraksi Terbalik",
+    },
+    "table-grid.pdf": {
+        "title": "Uji Deteksi Tabel Bergaris",
     },
 }
 

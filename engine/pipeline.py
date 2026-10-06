@@ -83,7 +83,12 @@ def build_reflowdoc(
     raw, layout_report = detect_layout(raw)
     raw, order_report = reconstruct_reading_order(raw, profile, layout_report)
     raw = detect_scripts(raw)
-    document = reconstruct_semantics(profile, raw, layout_report, order_report)
+    from engine.reconstruction.engine import _table_page_renderer
+
+    document = reconstruct_semantics(
+        profile, raw, layout_report, order_report,
+        page_renderer=_table_page_renderer(source),
+    )
 
     if ocr_report is not None:
         from engine.reflowdoc.models import ReflowWarning

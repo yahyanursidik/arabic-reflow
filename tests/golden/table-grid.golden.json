@@ -1,0 +1,21 @@
+{
+  "fixture": "table-grid.pdf",
+  "page_count": 1,
+  "classification": "native",
+  "arabic_detected": false,
+  "arabic_letter_count": 0,
+  "harakat_count": 0,
+  "presentation_form_count": 0,
+  "full_text_sha256": "075f1b30cec27fc6e528bce6a1016459602691377661e84a430608b59a02d734",
+  "pages": [
+    {
+      "page": 1,
+      "blocks": [
+        "Nama\nJumlah\nKeterangan",
+        "Kurma\n3 kg\nUntuk tamu",
+        "Air zamzam\n2 botol\nDibawa pulang",
+        "Tabel di atas memuat jadwal pembagian hadits kurma dan air zamzam."
+      ]
+    }
+  ]
+}

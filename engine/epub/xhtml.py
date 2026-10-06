@@ -104,7 +104,15 @@ def _footnote(fn: FootnoteBlock) -> str:
     return f"<aside epub:type=\"footnote\"{_attrs(fn.lang, fn.dir)} id=\"{escape(fn.id or 'fn')}\">{inner}</aside>"
 
 
-def _table(t: TableBlock) -> str:
+def _table(t: TableBlock, document: ReflowDocument | None = None) -> str:
+    if not t.rows and t.fallback_resource_id and document is not None:
+        # Low-confidence grid: PRD 8.14 fallback — the region ships as an image.
+        src = t.fallback_resource_id
+        for resource in document.resources:
+            if resource.id == t.fallback_resource_id:
+                src = f"resources/{resource.filename or resource.id}"
+                break
+        return f"<figure><img src=\"{escape(src)}\" alt=\"\"/></figure>"
     rows = []
     for row in t.rows:
         cells = "".join(
@@ -128,7 +136,7 @@ def _render_block(block, document: ReflowDocument | None = None) -> str:
     if isinstance(block, FootnoteBlock):
         return _footnote(block)
     if isinstance(block, TableBlock):
-        return _table(block)
+        return _table(block, document)
     return ""
 
 

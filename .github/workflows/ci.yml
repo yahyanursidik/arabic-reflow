@@ -8,14 +8,25 @@ on:
 jobs:
   engine-tests:
     runs-on: ubuntu-latest
+    env:
+      EPUBCHECK_JAR: ${{ github.workspace }}/epubcheck/epubcheck.jar
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
         with:
           python-version: "3.14"
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "17"
+      - name: Download epubcheck (W3C)
+        run: |
+          curl -sSL -o epubcheck.zip https://github.com/w3c/epubcheck/releases/download/v5.2.1/epubcheck-5.2.1.zip
+          unzip -q epubcheck.zip
+          mv epubcheck-5.2.1 epubcheck
       - name: Install engine and dev dependencies
         run: pip install -e ".[api,dev]"
-      - name: Run tests (unit + fixture + golden + snapshot)
+      - name: Run tests (unit + fixture + golden + snapshot + epubcheck)
         run: pytest -q
       - name: Check ReflowDoc JSON schema is up to date
         run: python -m engine.reflowdoc.schema --check
@@ -36,3 +47,47 @@ jobs:
         run: npm install
       - name: Build
         run: npm run build
+
+  compose-smoke:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Build images
+        run: docker compose build
+      - name: Start stack (waits for healthchecks)
+        run: docker compose up --wait --wait-timeout 180
+      - name: Reach API and web from the host
+        run: |
+          curl --fail --retry 15 --retry-delay 2 --retry-connrefused http://localhost:8000/api/v1/health
+          curl --fail --retry 15 --retry-delay 2 --retry-connrefused http://localhost:3000/
+      - name: Convert a fixture end to end through the running stack
+        run: |
+          set -euo pipefail
+          DOC=$(curl -sf -X POST \
+            -F "file=@tests/fixtures/indonesian-native.pdf;type=application/pdf" \
+            http://localhost:8000/api/v1/documents \
+            | python3 -c "import sys, json; print(json.load(sys.stdin)['id'])")
+          JOB=$(curl -sf -X POST -H 'Content-Type: application/json' \
+            -d '{"ocr": false}' \
+            "http://localhost:8000/api/v1/documents/$DOC/convert" \
+            | python3 -c "import sys, json; print(json.load(sys.stdin)['job_id'])")
+          STATUS=""
+          for _ in $(seq 1 60); do
+            STATUS=$(curl -sf "http://localhost:8000/api/v1/jobs/$JOB" \
+              | python3 -c "import sys, json; print(json.load(sys.stdin)['status'])")
+            [ "$STATUS" = "completed" ] && break
+            [ "$STATUS" = "failed" ] && { echo "conversion failed"; exit 1; }
+            sleep 2
+          done
+          [ "$STATUS" = "completed" ] || { echo "conversion did not finish"; exit 1; }
+          curl -sf -X POST "http://localhost:8000/api/v1/documents/$DOC/cover?page=1" > /dev/null
+          curl -sf -X PATCH -H 'Content-Type: application/json' \
+            -d '{"title": "Smoke Test Book", "author": ["CI"]}' \
+            "http://localhost:8000/api/v1/documents/$DOC/metadata" > /dev/null
+          curl -sf -X POST "http://localhost:8000/api/v1/documents/$DOC/export/epub" \
+            -o /tmp/out.epub
+          test -s /tmp/out.epub
+          echo "EPUB exported through docker compose: $(wc -c < /tmp/out.epub) bytes"
+      - name: Stop stack
+        if: always()
+        run: docker compose down

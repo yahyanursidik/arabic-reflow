@@ -9,6 +9,13 @@ services:
       - REFLOW_STORAGE_DIR=/tmp/reflow
     volumes:
       - reflow-storage:/tmp/reflow
+    healthcheck:
+      # python ships in the slim image; urllib needs no curl
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/api/v1/health')"]
+      interval: 5s
+      timeout: 5s
+      retries: 12
+      start_period: 10s
 
   web:
     build:
@@ -19,7 +26,15 @@ services:
     environment:
       - NEXT_PUBLIC_API_URL=http://localhost:8000
     depends_on:
-      - api
+      api:
+        condition: service_healthy
+    healthcheck:
+      # node 22 has global fetch; no curl in alpine
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/').then((r) => { if (!r.ok) process.exit(1); })"]
+      interval: 10s
+      timeout: 5s
+      retries: 12
+      start_period: 30s
 
 volumes:
   reflow-storage:

@@ -13,7 +13,8 @@
     ],
     "description": null,
     "identifier": null,
-    "source_filename": "sample.pdf"
+    "source_filename": "sample.pdf",
+    "cover_resource_id": null
   },
   "chapters": [
     {

@@ -26,6 +26,9 @@ MVP storage is the temporary filesystem, no database (ARCHITECTURE.md 8):
 | GET | `/api/v1/documents/{id}/profile` | M8 | Stored analyzer profile (404 before analysis) |
 | GET | `/api/v1/documents/{id}/job` | M8 | Latest conversion job for the document |
 | GET | `/api/v1/documents/{id}/source/pages/{n}.png` | M8 | Page raster for the source-vs-output review pane |
+| PATCH | `/api/v1/documents/{id}/metadata` | PRD 7 | Metadata editor: set book `title` / `author` on the stored ReflowDoc (404 before conversion) |
+| POST | `/api/v1/documents/{id}/cover?page={n}` | PRD 7 | Render source page `n` (150 dpi PNG) and set it as the EPUB cover |
+| DELETE | `/api/v1/documents/{id}/cover` | PRD 7 | Clear the cover resource and reference |
 
 ## Lifecycle
 

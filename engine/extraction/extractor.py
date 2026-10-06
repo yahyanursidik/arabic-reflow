@@ -62,7 +62,36 @@ def extract_page(page: pymupdf.Page, page_number: int) -> RawPage:
         rotation=page.rotation,
         blocks=blocks,
         images=images,
+        rule_segments=_rule_segments(page),
     )
+
+
+MAX_RULE_SEGMENTS = 200
+_RULE_THICKNESS = 2.5  # pt; drawings thicker than this are shapes, not rules
+
+
+def _rule_segments(page: pymupdf.Page) -> list[tuple[float, float, float, float]]:
+    """Thin straight vector segments (table rules, underlines), capped.
+
+    PyMuPDF reports drawings as rects; a rect thin in one dimension is a
+    rule line. Table detection requires these — geometry alone cannot
+    distinguish a grid from a two-column prose page.
+    """
+    segments: list[tuple[float, float, float, float]] = []
+    for drawing in page.get_drawings():
+        rect = drawing.get("rect")
+        if rect is None:
+            continue
+        width = rect.width
+        height = rect.height
+        if width <= 0 and height <= 0:
+            continue
+        if min(width, height) > _RULE_THICKNESS:
+            continue
+        segments.append((round(rect.x0, 2), round(rect.y0, 2), round(rect.x1, 2), round(rect.y1, 2)))
+        if len(segments) >= MAX_RULE_SEGMENTS:
+            break
+    return segments
 
 
 def extract(source: str | bytes) -> RawDocument:

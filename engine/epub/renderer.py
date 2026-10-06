@@ -88,7 +88,25 @@ def render_epub(
     )
     book.add_item(stylesheet)
 
+    cover = next(
+        (
+            resource
+            for resource in document.resources
+            if resource.id == document.metadata.cover_resource_id
+            and resource.kind == "image"
+            and resource.content
+        ),
+        None,
+    )
+    if cover is not None:
+        extension = "png" if (cover.media_type or "").endswith("png") else "jpg"
+        # ebooklib's set_cover registers the cover image, a cover.xhtml page,
+        # and the <meta name="cover"> OPF entry readers look for.
+        book.set_cover(f"cover.{extension}", cover.content)
+
     for resource in document.resources:
+        if resource is cover:
+            continue
         if resource.kind == "image" and resource.content:
             book.add_item(
                 epub.EpubItem(
@@ -130,7 +148,15 @@ def render_epub(
     book.toc = chapters
     book.add_item(epub.EpubNcx())
     book.add_item(epub.EpubNav())
-    book.spine = ["nav"] + chapters
+    spine: list[object] = ["nav"]
+    if cover is not None:
+        cover_page = next(
+            (item for item in book.get_items() if isinstance(item, epub.EpubCoverHtml)),
+            None,
+        )
+        if cover_page is not None:
+            spine.append(cover_page)
+    book.spine = spine + chapters
 
     with tempfile.TemporaryDirectory() as tmp:
         target = Path(tmp) / "book.epub"

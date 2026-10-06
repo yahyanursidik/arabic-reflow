@@ -17,6 +17,10 @@ export type Languages = string[];
 export type Description = string | null;
 export type Identifier = string | null;
 export type SourceFilename = string | null;
+/**
+ * Resource id of the chosen cover image (from a source page).
+ */
+export type CoverResourceId = string | null;
 export type Id = string;
 /**
  * None while chapter detection is incomplete (ungrouped chapter)
@@ -214,6 +218,7 @@ export interface DocumentMetadata {
   description?: Description;
   identifier?: Identifier;
   source_filename?: SourceFilename;
+  cover_resource_id?: CoverResourceId;
   [k: string]: unknown;
 }
 export interface Chapter {

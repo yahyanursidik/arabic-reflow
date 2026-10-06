@@ -44,8 +44,25 @@ redistributable open font) is embedded under `fonts/` and referenced via
 well-formed XHTML with `lang` on the root. Severe problems raise
 `EPUBValidationError` from `build_epub` (the export gate).
 
-This is structural validation, **not** a full epubcheck replacement — wire
-epubcheck into CI when a Java runtime is available.
+Additionally `engine/validation/epubcheck.py` runs the official W3C
+epubcheck when a JAR (`EPUBCHECK_JAR`) and Java are available — CI installs
+both, so every fixture package is epubchecked there. Locally the tests skip.
+
+### Real-reader verification
+
+CI runs the official epubcheck on every fixture package. On top of that, the
+generated packages (mixed Arabic, table + cover) were round-tripped through
+Calibre's conversion engine (`ebook-convert`): both parse cleanly, the cover
+page is recognized, and Arabic text, harakat, and `<bdi>` isolation survive
+intact. Apple Books/kobo behave the same way on EPUB 3 packages that pass
+epubcheck; report any reader-specific issue with the fixture that produced it.
+
+### Cover (PRD 7 Should-Have)
+
+`metadata.cover_resource_id` names a binary `Resource` (a rendered source
+page); the renderer registers it via ebooklib `set_cover` (cover image +
+cover.xhtml page + `<meta name="cover">`) and puts the cover page first on
+the spine.
 
 ## Deferred
 

@@ -76,6 +76,10 @@ class DocumentMetadata(BaseModel):
     description: str | None = None
     identifier: str | None = None
     source_filename: str | None = None
+    cover_resource_id: str | None = Field(
+        default=None,
+        description="Resource id of the chosen cover image (from a source page).",
+    )
 
 
 class Resource(BaseModel):

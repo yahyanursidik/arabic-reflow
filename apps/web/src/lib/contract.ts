@@ -133,6 +133,8 @@ export interface UiReflow {
   documentId: string;
   languages: string[];
   title: string;
+  author: string[];
+  coverResourceId?: string;
   blocks: UiBlock[];
   resources: Record<string, UiResource>;
   warnings: UiWarning[];
@@ -308,6 +310,8 @@ export function parseReflow(value: unknown): UiReflow {
     documentId: optString(value, "document_id") ?? "",
     languages: array(metadata.languages).filter((l): l is string => typeof l === "string"),
     title: optString(metadata, "title") ?? "",
+    author: array(metadata.author).filter((a): a is string => typeof a === "string"),
+    coverResourceId: optString(metadata, "cover_resource_id"),
     blocks,
     resources,
     warnings,

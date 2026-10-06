@@ -18,6 +18,7 @@ golden records with `scripts/update_golden.py` (commit both outputs).
 | `footnote-heavy.pdf` | Footnotes below a rule, reference markers |
 | `image-caption.pdf` | Embedded figure with caption below it (M6-05) |
 | `reversed-extraction.pdf` | Trap: renders fine, text layer extracts with reversed glyph order (M3-06) |
+| `table-grid.pdf` | Ruled 3×3 table: aligned cells + vector rules (M6-06) |
 
 ## How Arabic is written into fixtures
 

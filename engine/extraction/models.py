@@ -86,6 +86,9 @@ class RawPage(BaseModel):
     rotation: int = 0
     blocks: list[RawBlock] = Field(default_factory=list)
     images: list[RawImage] = Field(default_factory=list)
+    # Thin straight vector segments — the ruled-line signal the conservative
+    # table detector requires (capped to keep documents small).
+    rule_segments: list[tuple[float, float, float, float]] = Field(default_factory=list)
 
     @property
     def text(self) -> str:

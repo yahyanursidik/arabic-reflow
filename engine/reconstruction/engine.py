@@ -18,30 +18,40 @@ from engine.language.detect import detect_language
 from engine.layout.captions import find_captions
 from engine.layout.footnotes import detect_footnote_candidates
 from engine.layout.models import LayoutReport, OrderReport
+from engine.layout.tables import SEMANTIC_CONFIDENCE, TableRegion, detect_tables
 from engine.reflowdoc.models import (
     Chapter,
     Direction,
     FootnoteBlock,
     HeadingBlock,
     ImageBlock,
+    ListItem,
+    ListBlock,
     ParagraphBlock,
+    QuoteBlock,
     ReflowDocument,
     ReflowWarning,
     Resource,
     SourceRef,
     SpanNode,
+    TableBlock,
+    TableCell,
     TextNode,
     new_block_id,
     new_document,
 )
 from engine.reconstruction.headings import body_font_size, detect_headings
-from engine.reconstruction.paragraphs import build_paragraphs
+from engine.reconstruction.lists import LIST_CONFIDENCE, ListRun, _marker_of, _strip_marker, detect_lists
+from engine.reconstruction.paragraphs import ParagraphDraft, build_paragraphs, reference_width
+from engine.reconstruction.quotes import QUOTE_CONFIDENCE, is_quote_draft
 
 WARN_READING_ORDER_UNCERTAIN = "READING_ORDER_UNCERTAIN"
 WARN_PARAGRAPH_MERGE_UNCERTAIN = "PARAGRAPH_MERGE_UNCERTAIN"
 WARN_FURNITURE_REMOVED = "FURNITURE_REMOVED"
 WARN_PAGE_NUMBERS_REMOVED = "PAGE_NUMBERS_REMOVED"
 WARN_FOOTNOTE_UNCERTAIN = "FOOTNOTE_UNCERTAIN"
+WARN_TABLE_FALLBACK_IMAGE = "TABLE_FALLBACK_IMAGE"
+WARN_TABLE_DETECTED = "TABLE_DETECTED"
 
 # Full-page rasters are scans (M5's domain), not figures worth keeping.
 SCAN_IMAGE_COVERAGE = 0.85
@@ -125,13 +135,50 @@ def _resource_for(image: RawImage, page_number: int, index: int) -> Resource:
     )
 
 
+def _merge_list_items(run: ListRun) -> list[list[ParagraphDraft]]:
+    """Group a run's drafts into item drafts, folding continuations in.
+
+    detect_lists guarantees the run starts with a marker draft; a
+    marker-less draft continues the item before it.
+    """
+    items: list[list[ParagraphDraft]] = []
+    for draft in run.drafts:
+        if _marker_of(draft.text) is None and items:
+            items[-1].append(draft)
+        else:
+            items.append([draft])
+    return items
+
+
+def _table_page_renderer(source: str | bytes):
+    """Render a page region to PNG for low-confidence table fallback (PRD 8.14)."""
+    import pymupdf
+
+    if isinstance(source, bytes):
+        doc = pymupdf.open(stream=source, filetype="pdf")
+    else:
+        doc = pymupdf.open(source)
+
+    def render(page_number: int, bbox: tuple[float, float, float, float]) -> bytes:
+        page = doc[page_number - 1]
+        pix = page.get_pixmap(clip=pymupdf.Rect(*bbox), dpi=150)
+        return pix.tobytes("png")
+
+    return render
+
+
 def reconstruct_semantics(
     profile: DocumentProfile,
     raw: RawDocument,
     layout: LayoutReport,
     order: OrderReport,
+    page_renderer=None,
 ) -> ReflowDocument:
-    """Build the ReflowDocument from ordered raw pages."""
+    """Build the ReflowDocument from ordered raw pages.
+
+    `page_renderer(page_number, bbox) -> png bytes` enables the PRD 8.14
+    low-confidence table fallback (region rendered as image).
+    """
     doc = new_document(raw.source_filename)
     # Book metadata: the PDF info dictionary is the honest source when present.
     if raw.pdf_title:
@@ -145,6 +192,23 @@ def reconstruct_semantics(
     chapter = Chapter(id="chapter-001", title=None, level=1, blocks=[])
     sequence = 1
     footnote_pages: list[int] = []
+    table_pages: list[int] = []
+    fallback_tables: list[tuple[TableRegion, str]] = []
+
+    def make_paragraph(
+        draft: ParagraphDraft, dominant: ScriptClass, decision, lang: str,
+        direction: Direction, confidence: float, warnings: list[str],
+    ) -> ParagraphBlock:
+        return ParagraphBlock(
+            id=new_block_id(sequence),
+            source=SourceRef(page=draft.page, bbox=list(draft.bbox)),
+            lang=lang,
+            script=decision.script,
+            dir=direction,
+            confidence=round(confidence, 3),
+            warnings=warnings,
+            content=_content_nodes(draft.runs, dominant, direction),
+        )
 
     for page in raw.pages:
         text_blocks = [
@@ -162,16 +226,85 @@ def reconstruct_semantics(
         captions = find_captions(images, text_blocks, body_size)
         caption_numbers = set(captions.values())
 
+        # Table detection (M6-06): cell-like blocks leave the text flow.
+        table_regions = detect_tables(page.page, text_blocks, page.rule_segments)
+        table_block_numbers: set[int] = {
+            cell.block_number for region in table_regions for _, _, cell in region.cells
+        }
+
         drafts = build_paragraphs(
             page.page, text_blocks, headings, gutter=layout.gutters.get(page.page),
             footnotes=footnotes,
         )
+        if table_block_numbers:
+            drafts = [
+                d for d in drafts
+                if not (d.block_numbers and set(d.block_numbers) <= table_block_numbers)
+            ]
+
+        # Quote geometry needs page-wide references (PRD 8.5: indentation).
+        if text_blocks:
+            page_x0 = min(b.bbox[0] for b in text_blocks)
+            page_x1 = max(b.bbox[2] for b in text_blocks)
+            ref_width = reference_width(text_blocks)
+        else:
+            page_x0 = page_x1 = ref_width = 0.0
+        single_column = (
+            layout.gutters.get(page.page) is None
+            and page.page not in order.uncertain_pages
+        )
+
+        list_starts: dict[int, ListRun] = {start: run for start, run in detect_lists(drafts)}
 
         page_blocks: list[object] = []
         caption_block_ids: dict[int, str] = {}
         image_resources: list[Resource] = []
 
-        for draft in drafts:
+        draft_index = 0
+        while draft_index < len(drafts):
+            if draft_index in list_starts:
+                run = list_starts[draft_index]
+                run_warnings: list[str] = []
+                items: list[ListItem] = []
+                for item_drafts in _merge_list_items(run):
+                    first = item_drafts[0]
+                    marker = _marker_of(first.text) or ""
+                    for extra in item_drafts[1:]:
+                        first.runs.extend(extra.runs)
+                        first.merged_block_count += 1
+                    content_runs = _strip_marker(first, marker) if marker else first.runs
+                    decision = classify_block(first.text)
+                    dominant = _dominant_script(decision.script, decision.profile)
+                    lang = detect_language(first.text).label
+                    direction = decision.dir
+                    item_block = ParagraphBlock(
+                        id=new_block_id(sequence),
+                        source=SourceRef(page=first.page, bbox=list(first.bbox)),
+                        lang=lang,
+                        script=decision.script,
+                        dir=direction,
+                        confidence=round(min(first.confidence, order.confidence.get(first.page, 1.0)), 3),
+                        content=_content_nodes(content_runs, dominant, direction),
+                    )
+                    sequence += 1
+                    items.append(ListItem(blocks=[item_block]))
+                page_blocks.append(
+                    ListBlock(
+                        id=new_block_id(sequence),
+                        lang=items[0].blocks[0].lang if items else None,
+                        dir=items[0].blocks[0].dir if items else None,
+                        confidence=LIST_CONFIDENCE,
+                        warnings=run_warnings,
+                        ordered=run.ordered,
+                        items=items,
+                    )
+                )
+                sequence += 1
+                draft_index += len(run.drafts)
+                continue
+
+            draft = drafts[draft_index]
+            draft_index += 1
             decision = classify_block(draft.text)
             dominant = _dominant_script(decision.script, decision.profile)
             lang = detect_language(draft.text).label
@@ -188,15 +321,7 @@ def reconstruct_semantics(
             confidence = min(draft.confidence, order.confidence.get(draft.page, 1.0))
 
             if draft.footnote_marker is not None:
-                inner = ParagraphBlock(
-                    id=new_block_id(sequence),
-                    source=source,
-                    lang=lang,
-                    script=decision.script,
-                    dir=direction,
-                    confidence=round(confidence, 3),
-                    content=_content_nodes(draft.runs, dominant, direction),
-                )
+                inner = make_paragraph(draft, dominant, decision, lang, direction, confidence, [])
                 sequence += 1
                 page_blocks.append(
                     FootnoteBlock(
@@ -225,17 +350,29 @@ def reconstruct_semantics(
                         text=draft.text,
                     )
                 )
-            elif draft.runs:
-                block = ParagraphBlock(
-                    id=new_block_id(sequence),
-                    source=source,
-                    lang=lang,
-                    script=decision.script,
-                    dir=direction,
-                    confidence=round(confidence, 3),
-                    warnings=block_warnings,
-                    content=_content_nodes(draft.runs, dominant, direction),
+            elif is_quote_draft(
+                draft,
+                page_x0=page_x0,
+                page_x1=page_x1,
+                ref_width=ref_width,
+                single_column=single_column,
+                is_caption=any(n in caption_numbers for n in draft.block_numbers),
+            ):
+                page_blocks.append(
+                    QuoteBlock(
+                        id=new_block_id(sequence),
+                        source=source,
+                        lang=lang,
+                        script=decision.script,
+                        dir=direction,
+                        confidence=QUOTE_CONFIDENCE,
+                        warnings=block_warnings,
+                        subtype="arabic" if dominant is ScriptClass.ARABIC else None,
+                        text=draft.text,
+                    )
                 )
+            elif draft.runs:
+                block = make_paragraph(draft, dominant, decision, lang, direction, confidence, block_warnings)
                 for number in draft.block_numbers:
                     if number in caption_numbers:
                         caption_block_ids[number] = block.id
@@ -243,6 +380,59 @@ def reconstruct_semantics(
             else:
                 continue
             sequence += 1
+
+        for region in table_regions:
+            table_pages.append(page.page)
+            table_id = new_block_id(sequence)
+            sequence += 1
+            if region.confidence >= SEMANTIC_CONFIDENCE:
+                rows: list[list[TableCell]] = []
+                current_row: list[TableCell] = []
+                current_row_index = 0
+                for row, _col, cell_block in region.cells:
+                    cell_decision = classify_block(cell_block.text)
+                    if row != current_row_index and current_row:
+                        rows.append(current_row)
+                        current_row = []
+                        current_row_index = row
+                    current_row.append(
+                        TableCell(
+                            text=cell_block.text,
+                            lang=detect_language(cell_block.text).label,
+                            dir=cell_decision.dir,
+                        )
+                    )
+                if current_row:
+                    rows.append(current_row)
+                page_blocks.append(
+                    TableBlock(
+                        id=table_id,
+                        source=SourceRef(page=page.page, bbox=list(region.bbox)),
+                        confidence=region.confidence,
+                        rows=rows,
+                    )
+                )
+            elif page_renderer is not None:
+                content = page_renderer(page.page, region.bbox)
+                resource = Resource(
+                    id=f"table-p{page.page}-{len(fallback_tables) + 1}",
+                    kind="image",
+                    media_type="image/png",
+                    filename=f"table-p{page.page}-{len(fallback_tables) + 1}.png",
+                    source_page=page.page,
+                    content=content,
+                )
+                image_resources.append(resource)
+                fallback_tables.append((region, resource.id))
+                page_blocks.append(
+                    TableBlock(
+                        id=table_id,
+                        source=SourceRef(page=page.page, bbox=list(region.bbox)),
+                        confidence=region.confidence,
+                        rows=[],
+                        fallback_resource_id=resource.id,
+                    )
+                )
 
         for index, image in enumerate(images, start=1):
             resource = _resource_for(image, page.page, index)
@@ -277,6 +467,28 @@ def reconstruct_semantics(
                     "Footnote candidates detected on pages "
                     f"{sorted(set(footnote_pages))}; markers linked heuristically."
                 ),
+            )
+        )
+
+    if table_pages:
+        doc.warnings.append(
+            ReflowWarning(
+                code=WARN_TABLE_DETECTED,
+                severity="info",
+                message=f"Table grids detected on pages {sorted(set(table_pages))}.",
+            )
+        )
+    for region, resource_id in fallback_tables:
+        doc.warnings.append(
+            ReflowWarning(
+                code=WARN_TABLE_FALLBACK_IMAGE,
+                severity="warning",
+                message=(
+                    f"Table on page {region.page} has low grid confidence "
+                    f"({region.confidence}); rendered as image instead of "
+                    "semantic markup."
+                ),
+                source_page=region.page,
             )
         )
 

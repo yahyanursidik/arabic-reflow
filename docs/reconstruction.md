@@ -99,7 +99,8 @@ diffs stay stable.
 
 ## Known limits (deferred)
 
-- Quote detection is not implemented; such content falls back to paragraphs.
+- Quote detection is conservative (both-sides-indented single blocks on
+  single-column pages); unindented quotations fall back to paragraphs.
 - No page_break blocks: ReflowDoc is a flow document; page provenance lives
   in each block's `source.page` and the furniture report.
 - Column handling supports N gutters via recursive splitting (M6-01), but
@@ -108,11 +109,32 @@ diffs stay stable.
 - Footnote *detection* is heuristic zoning (bottom quarter, small font,
   numbered marker) and emits `FOOTNOTE_UNCERTAIN`; body-text marker linking
   (noterefs) is not implemented yet (M6-04 refinement).
-- Table detection (M6-06, P2) is not implemented; table-like content falls
-  back to paragraphs.
+- Table detection requires vector rule lines; unruled tables fall back to
+  paragraphs.
 - Arabic page numbers in decorated forms (e.g. `١٤٤٧` alone in a band) are
   removed by the digit rule only when they parse via the Arabic-Indic
   translation; complex decorations may survive into paragraphs.
+
+## Semantic quote/list/table detection (PRD 8.10/8.14, v0.7.0)
+
+- **Quotes** (`engine/reconstruction/quotes.py`): a draft is a quote when it
+  is a single short block (≤ 450 chars) indented on both sides of a
+  single-column page — the print block-quote silhouette. Multi-column pages
+  are excluded (column members always look indented) and caption-numbered
+  drafts never qualify.
+- **Lists** (`engine/reconstruction/lists.py`): consecutive marker-initial
+  drafts (bullets, dashes, `1.`/`1)` ASCII or Arabic-Indic) form one
+  `ListBlock` (≥ 2 items); markers are stripped with
+  `list_marker_removed` provenance; a lowercase marker-less draft continues
+  the previous item when the item is not yet terminal.
+- **Tables** (`engine/layout/tables.py`): line-level grid detection — cells
+  are short lines whose x0s cluster into ≥ 2 columns and y0s into ≥ 2 rows
+  with a clean assignment. **A ruled vector line must frame the grid**
+  (extraction captures thin drawings as `rule_segments`): two-column prose
+  aligns exactly like a grid, so the rule gate is mandatory. Confidence
+  ≥ 0.75 → semantic `<table>`; below it → the region renders as an image
+  (`TABLE_FALLBACK_IMAGE` warning, PRD 8.14); detection always emits
+  `TABLE_DETECTED` info.
 
 ## Milestone 6 additions
 

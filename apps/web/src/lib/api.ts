@@ -190,3 +190,37 @@ export const api = {
     return `${API_BASE}/api/v1/documents/${id}/source/pages/${page}.png`;
   },
 };
+
+export interface BookMetadata {
+  title?: string;
+  author?: string[];
+}
+
+export interface CoverResult {
+  cover_resource_id: string | null;
+  source_page?: number;
+}
+
+export const bookApi = {
+  async updateMetadata(id: string, update: BookMetadata): Promise<CoverResult> {
+    return request(`/api/v1/documents/${id}/metadata`, (value) => value as CoverResult, {
+      method: "PATCH",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify(update),
+    });
+  },
+
+  async setCover(id: string, page: number): Promise<CoverResult> {
+    return request(
+      `/api/v1/documents/${id}/cover?page=${encodeURIComponent(String(page))}`,
+      (value) => value as CoverResult,
+      { method: "POST" },
+    );
+  },
+
+  async clearCover(id: string): Promise<CoverResult> {
+    return request(`/api/v1/documents/${id}/cover`, (value) => value as CoverResult, {
+      method: "DELETE",
+    });
+  },
+};
