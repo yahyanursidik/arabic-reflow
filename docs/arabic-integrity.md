@@ -22,17 +22,36 @@ penalties: presentation-form rate (≤ 0.25, info — presentation forms are
 common in real-world extraction and are not an error by themselves),
 unusual letters outside Arabic/Latin such as the Georgian-range ligature
 artifacts (≤ 0.3), suspicious spacing (0.25), orphan combining marks (≤ 0.2),
-and severe bidi anomalies (0.1 each).
+severe bidi anomalies (0.1 each), and reversed glyph order (0.3–0.45).
 
 Review levels: `good` (≥ 0.85), `review_recommended` (≥ 0.6), else
 `problem_likely`. Avoid presenting the score with false precision.
+
+### Reversed glyph order (`REVERSED_ORDER_SUSPECTED`)
+
+A correct Arabic word never begins with a combining mark — but when a
+producer draws Arabic glyph-by-glyph in left-to-right order (a classic
+broken-PDF artifact: the page looks perfect on screen while the text layer
+is unreadable), every marked word ends with its mark, so the extraction
+contains **word-initial harakat**. `inspect_text` measures the share of
+Arabic-bearing words that begin with a harakat-range mark (U+064B–U+065F,
+shadda included); at ≥ 20% it emits `REVERSED_ORDER_SUSPECTED`, sets
+`reversed_order_suspected` on the block integrity payload, and penalizes the
+score by `min(0.45, max(0.3, rate × 0.6))` — enough to land in
+`problem_likely`, which routes the block into review filters and the
+`LOW_ARABIC_CONFIDENCE` document warning. Qur'anic annotation signs
+(U+06D6–U+06ED) are excluded: some encodings place waqf marks after
+whitespace legitimately. The trap fixture `reversed-extraction.pdf` pins
+this behavior end to end. As with every integrity signal, detection only
+reports — the text is never rewritten.
 
 ## Pipeline wiring
 
 `engine.arabic.report.attach_integrity` runs inside
 `reconstruct_semantics`: blocks carrying Arabic get an `arabic_integrity`
 payload (`score`, `presentation_forms_detected`, `suspicious_spacing`,
-`combining_mark_warnings`, `bidi_warning`); blocks below `problem_likely`
+`combining_mark_warnings`, `bidi_warning`, `reversed_order_suspected`);
+blocks below `problem_likely`
 gain the `LOW_ARABIC_CONFIDENCE` block warning and a document-level
 `LOW_ARABIC_CONFIDENCE` warning listing the block ids. Mixed blocks are
 checked for span isolation: an Arabic/Latin mixture without `SpanNode`

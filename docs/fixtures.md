@@ -17,6 +17,7 @@ golden records with `scripts/update_golden.py` (commit both outputs).
 | `hybrid.pdf` | Native page 1 + scanned page 2 |
 | `footnote-heavy.pdf` | Footnotes below a rule, reference markers |
 | `image-caption.pdf` | Embedded figure with caption below it (M6-05) |
+| `reversed-extraction.pdf` | Trap: renders fine, text layer extracts with reversed glyph order (M3-06) |
 
 ## How Arabic is written into fixtures
 
@@ -38,6 +39,18 @@ We deliberately keep these artifacts because the engine must handle them:
 - **Reversed digit runs**: Arabic-Indic digit sequences extract reversed.
 - **Bidi line splits**: punctuation and mixed-direction runs can appear as
   separate spans or reordered fragments.
+
+### The reversed trap fixture
+
+`reversed-extraction.pdf` is the one fixture written **without**
+`insert_htmlbox`: ReportLab draws the vocalized hadith glyph-by-glyph in
+left-to-right order, mimicking producers whose output renders correctly on
+screen while the text layer extracts in reversed glyph order. The builder
+verifier asserts the trap actually traps — the logical string must be absent
+from extraction — and `test_reversed_fixture_flagged_by_pipeline` proves the
+integrity engine flags it (`REVERSED_ORDER_SUSPECTED`, document level
+`problem_likely`). ReportLab is only needed when regenerating fixtures; CI
+consumes the committed PDF.
 
 ## Golden tests
 

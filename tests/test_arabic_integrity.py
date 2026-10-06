@@ -2,6 +2,8 @@
 
 from __future__ import annotations
 
+from pathlib import Path
+
 from engine.arabic.integrity import (
     LEVEL_GOOD,
     LEVEL_PROBLEM,
@@ -14,6 +16,7 @@ from engine.arabic.report import attach_integrity, document_report
 from engine.reflowdoc.models import ParagraphBlock, ReflowDocument, SpanNode
 
 VOCALIZED = "إِنَّمَا الْأَعْمَالُ بِالنِّيَّاتِ"
+REVERSED_VOCALIZED = "ِتاَّيِّنلاِب ُلاَمْعَأْلا اَمَّنِإ"
 PRESENTATION_FORMS = "اﻟﻔﺎﺗﺤﺔ ﺑِﺴْﻢِ ﷲ"
 UNUSUAL_MAPPING = "اﻟﺮﺣﻤﺎﻦ اﻟﺮﺣﻴﻢ სტ"  # Georgian-range extraction artifact
 
@@ -50,6 +53,49 @@ def test_suspicious_spacing_penalizes() -> None:
     assert "SUSPICIOUS_SPACING" in issues
     assert dirty.suspicious_spacing is True
     assert dirty.score < clean.score
+
+
+# --- Reversed glyph-order detection (extraction artifact) -----------------------
+
+
+def test_reversed_arabic_flagged_as_problem() -> None:
+    """Glyph-order reversal (text drawn LTR by the producer) must not pass as
+    healthy: word-initial harakat are impossible in correct Arabic."""
+    integrity, issues = inspect_text(REVERSED_VOCALIZED)
+    assert "REVERSED_ORDER_SUSPECTED" in issues
+    assert integrity.reversed_order_suspected is True
+    assert level_of(integrity.score) == LEVEL_PROBLEM
+
+
+def test_correct_vocalized_not_flagged_as_reversed() -> None:
+    integrity, issues = inspect_text(VOCALIZED)
+    assert "REVERSED_ORDER_SUSPECTED" not in issues
+    assert integrity.reversed_order_suspected is False
+
+
+def test_waqf_annotation_after_space_not_reversal() -> None:
+    """Qur'anic annotation signs may follow whitespace; only harakat-range
+    marks at word start count as reversal evidence."""
+    integrity, issues = inspect_text("قَالَ ۖ وَقَالَ ۚ رَسُولُ اللَّهِ ۘ")
+    assert "REVERSED_ORDER_SUSPECTED" not in issues
+    assert integrity.reversed_order_suspected is False
+
+
+def test_reversed_fixture_flagged_by_pipeline() -> None:
+    import pytest
+
+    fixture = Path(__file__).parent / "fixtures" / "reversed-extraction.pdf"
+    if not fixture.exists():
+        pytest.skip("reversed-extraction.pdf fixture not generated")
+    from engine.arabic.report import document_report
+    from engine.pipeline import build_reflowdoc
+
+    result = build_reflowdoc(fixture.read_bytes())
+    report = document_report(result.document)
+    assert "REVERSED_ORDER_SUSPECTED" in report["issues"]
+    assert report["level"] == LEVEL_PROBLEM
+    codes = [w.code for w in result.document.warnings]
+    assert "LOW_ARABIC_CONFIDENCE" in codes
 
 
 # --- Search normalization (section 11) ------------------------------------------

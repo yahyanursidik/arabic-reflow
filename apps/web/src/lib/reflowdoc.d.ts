@@ -52,6 +52,10 @@ export type PresentationFormsDetected = boolean;
 export type SuspiciousSpacing = boolean;
 export type CombiningMarkWarnings = number;
 export type BidiWarning = boolean;
+/**
+ * Word-initial harakat detected: glyph order likely reversed.
+ */
+export type ReversedOrderSuspected = boolean;
 export type Type = "heading";
 export type Level1 = number;
 export type Text = string;
@@ -258,6 +262,7 @@ export interface ArabicIntegrity {
   suspicious_spacing?: SuspiciousSpacing;
   combining_mark_warnings?: CombiningMarkWarnings;
   bidi_warning?: BidiWarning;
+  reversed_order_suspected?: ReversedOrderSuspected;
   [k: string]: unknown;
 }
 export interface ParagraphBlock {

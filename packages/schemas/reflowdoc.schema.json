@@ -28,6 +28,12 @@
           "default": false,
           "title": "Bidi Warning",
           "type": "boolean"
+        },
+        "reversed_order_suspected": {
+          "default": false,
+          "description": "Word-initial harakat detected: glyph order likely reversed.",
+          "title": "Reversed Order Suspected",
+          "type": "boolean"
         }
       },
       "required": [

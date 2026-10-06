@@ -3,4 +3,4 @@
 Core rule: preserve first, reconstruct second, never invent.
 """
 
-__version__ = "0.6.3"
+__version__ = "0.6.4"

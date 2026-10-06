@@ -1,0 +1,19 @@
+{
+  "fixture": "reversed-extraction.pdf",
+  "page_count": 1,
+  "classification": "native",
+  "arabic_detected": true,
+  "arabic_letter_count": 18,
+  "harakat_count": 15,
+  "presentation_form_count": 0,
+  "full_text_sha256": "96bc1e072b2320814d0ca60fa15c77169ecde14609283d65c3c7ba4862048c18",
+  "pages": [
+    {
+      "page": 1,
+      "blocks": [
+        "ِتاَّيِّنلاِب ُلاَمْعَأْلا اَمَّنِإ",
+        "Hadits ini tampak normal pada pembaca PDF."
+      ]
+    }
+  ]
+}

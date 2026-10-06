@@ -59,6 +59,10 @@ class ArabicIntegrity(BaseModel):
     suspicious_spacing: bool = False
     combining_mark_warnings: int = 0
     bidi_warning: bool = False
+    reversed_order_suspected: bool = Field(
+        default=False,
+        description="Word-initial harakat detected: glyph order likely reversed.",
+    )
 
 
 class DocumentMetadata(BaseModel):

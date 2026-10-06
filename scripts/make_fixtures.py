@@ -262,6 +262,30 @@ def fixture_footnotes(w: FixtureWriter) -> pymupdf.Document:
     return doc
 
 
+def fixture_reversed_extraction(w: FixtureWriter) -> pymupdf.Document:
+    """Trap fixture: renders fine on screen, glyph order is reversed.
+
+    Drawn with ReportLab instead of insert_htmlbox: ReportLab places glyphs
+    left-to-right without bidirectional reordering, which is exactly the
+    producer-side artifact that makes extraction return reversed Arabic with
+    word-initial harakat (the failure mode REVERSED_ORDER_SUSPECTED exists
+    for). Documented in docs/fixtures.md.
+    """
+    from reportlab.pdfbase import pdfmetrics
+    from reportlab.pdfbase.ttfonts import TTFont
+    from reportlab.pdfgen.canvas import Canvas
+
+    font_path = w._tmp / "arabic.ttf"
+    pdfmetrics.registerFont(TTFont("ReflowArabicRL", str(font_path)))
+    path = w._tmp / "reversed-extraction.pdf"
+    canvas = Canvas(str(path))
+    canvas.setFont("ReflowArabicRL", 16)
+    canvas.drawString(72, 750, HADITH_NIYYAH_VOCALIZED)
+    canvas.drawString(72, 700, "Hadits ini tampak normal pada pembaca PDF.")
+    canvas.save()
+    return pymupdf.open(path)
+
+
 def _arabic_letters(text: str) -> int:
     from engine.arabic.unicode import is_arabic_letter
     return sum(1 for ch in text if is_arabic_letter(ch))
@@ -335,6 +359,13 @@ FIXTURES: dict[str, tuple[callable, callable]] = {
         lambda t: ([] if "Gambar 1: Diagram alir rekonstruksi dokumen." in t
                    else ["caption text missing"]),
     ),
+    "reversed-extraction.pdf": (
+        fixture_reversed_extraction,
+        # The trap only works if extraction is actually reversed: the logical
+        # string must be absent while Arabic letters are present.
+        lambda t: ([] if (HADITH_NIYYAH_VOCALIZED not in t and _arabic_letters(t) > 15)
+                   else ["expected reversed Arabic extraction (trap did not trap)"]),
+    ),
 }
 
 
@@ -364,6 +395,9 @@ FIXTURE_METADATA: dict[str, dict[str, str]] = {
     },
     "image-caption.pdf": {
         "title": "Panduan Rekonstruksi Bergambar",
+    },
+    "reversed-extraction.pdf": {
+        "title": "Uji Integritas Ekstraksi Terbalik",
     },
 }
 
