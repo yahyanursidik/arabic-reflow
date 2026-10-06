@@ -65,7 +65,7 @@ def create_app(storage_dir: Path | None = None) -> FastAPI:
 
     app = FastAPI(
         title="Reflow API",
-        version="0.7.0",
+        version="0.7.1",
         description="Mixed Arabic-Latin PDF to reflowable EPUB 3 conversion.",
     )
     app.add_middleware(

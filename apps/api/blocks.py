@@ -89,14 +89,14 @@ def render_block_as_image(
     if not _editable_text_block(block):
         raise ValueError(f"block type {block.type} cannot be rendered as an image")
 
-    x0, y0, x1, y1 = block.source.bbox
+    from engine.ocr.base import render_region_png
+
     source = pymupdf.open(storage.source_path(document_id))
     try:
         page = source.load_page(block.source.page - 1)
-        # Small padding so descenders and harakat are not clipped.
-        clip = pymupdf.Rect(x0 - 2, y0 - 2, x1 + 2, y1 + 2) & page.rect
-        pix = page.get_pixmap(matrix=pymupdf.Matrix(dpi / 72, dpi / 72), clip=clip)
-        png = pix.tobytes("png")
+        # Padding expands until the edges are ink-free: real-world PDFs often
+        # report bboxes tighter than the glyph ink, which clipped harakat.
+        png = render_region_png(page, block.source.bbox, dpi=dpi)
     finally:
         source.close()
 

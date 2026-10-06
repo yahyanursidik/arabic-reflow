@@ -6,6 +6,8 @@ decision and comparison logic runs against a deterministic fake engine.
 
 from __future__ import annotations
 
+import io
+
 import pytest
 
 from engine.analyzer.analyzer import analyze
@@ -175,3 +177,56 @@ def test_ocr_input_document_unchanged(fixtures_dir) -> None:
     apply_ocr(fixtures_dir / "scanned.pdf", analyze(fixtures_dir / "scanned.pdf"),
               raw, FakeEngine())
     assert raw.model_dump_json() == before
+
+
+# --- Region rendering with edge-clean expansion (render-as-image fix) ----------
+
+
+def test_render_region_expands_until_edges_are_clean() -> None:
+    """Ink deliberately outside the given bbox must not be clipped: the
+    renderer grows its padding until the outer pixel ring is clean paper."""
+    import pymupdf
+
+    from engine.ocr.base import render_region_png
+
+    doc = pymupdf.open()
+    page = doc.new_page(width=400, height=400)
+    # A black bar that extends 20pt beyond the bbox on every side.
+    page.draw_rect(pymupdf.Rect(80, 80, 320, 320), color=None, fill=(0, 0, 0))
+    bbox = (100, 100, 300, 300)  # 20pt of ink outside on each side
+
+    png = render_region_png(page, bbox, dpi=72)
+
+    check = pymupdf.Pixmap(png)
+    assert not _edges_have_ink_for_test(check), "edges must be clean paper"
+
+
+def _edges_have_ink_for_test(pix: "pymupdf.Pixmap") -> bool:
+    width, height, n = pix.width, pix.height, pix.n
+    samples = pix.samples
+    stride = width * n
+
+    def ink(x: int, y: int) -> bool:
+        offset = y * stride + x * n
+        return any(samples[offset + c] < 235 for c in range(min(n, 3)))
+
+    for y in range(height):
+        xs = range(width) if y < 3 or y >= height - 3 else list(range(3)) + list(range(width - 3, width))
+        if any(ink(x, y) for x in xs):
+            return True
+    return False
+
+
+def test_render_region_respects_page_bounds() -> None:
+    import pymupdf
+
+    from engine.ocr.base import render_region_png
+
+    doc = pymupdf.open()
+    page = doc.new_page(width=400, height=400)
+    page.draw_rect(pymupdf.Rect(0, 0, 400, 400), color=None, fill=(1, 1, 1))
+    page.draw_rect(pymupdf.Rect(10, 10, 390, 390), color=None, fill=(0, 0, 0))
+    # Block at the very page edge: expansion clamps to the page rect.
+    png = render_region_png(page, (0, 0, 100, 100), dpi=72)
+    check = pymupdf.Pixmap(png)
+    assert check.width > 0 and check.height > 0

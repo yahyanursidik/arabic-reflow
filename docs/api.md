@@ -54,6 +54,12 @@ last known state.
 
 ## Block edits
 
+Block-to-image crops use the edge-clean region renderer
+(`engine.ocr.base.render_region_png`): the crop padding grows until the
+outer pixel ring is free of ink, because real-world PDFs often report text
+bboxes tighter than the actual glyph ink (broken subset-font metrics),
+which used to clip harakat and descenders.
+
 `PATCH .../blocks/{block_id}` supports `text`, `lang`, and `dir` for
 paragraph/heading/quote blocks. A text edit replaces the paragraph's content
 with a single text node (inline span reconstruction from arbitrary user text

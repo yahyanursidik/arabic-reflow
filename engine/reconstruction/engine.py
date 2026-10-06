@@ -159,10 +159,13 @@ def _table_page_renderer(source: str | bytes):
     else:
         doc = pymupdf.open(source)
 
+    from engine.ocr.base import render_region_png
+
     def render(page_number: int, bbox: tuple[float, float, float, float]) -> bytes:
         page = doc[page_number - 1]
-        pix = page.get_pixmap(clip=pymupdf.Rect(*bbox), dpi=150)
-        return pix.tobytes("png")
+        # Edge-clean expansion: the grid bbox comes from line geometry and
+        # must not clip cell ink.
+        return render_region_png(page, bbox, dpi=150)
 
     return render
 
