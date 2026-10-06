@@ -215,6 +215,31 @@ def test_latin_only_fixture_skips_font(fixtures_dir) -> None:
     assert FONT_FILENAME not in archive.namelist()
 
 
+def test_stylesheet_carries_book_typography() -> None:
+    from engine.epub.css import STYLESHEET
+
+    for rule in (
+        "hyphens: auto",           # Latin hyphenation via lang attributes
+        "text-align: justify",     # book-style body
+        "widows: 2",               # no stranded lines at breaks
+        "orphans: 2",
+        "h1 { font-size: 1.85em; }",  # restrained heading scale
+        '[dir="rtl"]',             # Arabic sizing/alignment
+        "aside {",                 # footnote styling
+        "figcaption",
+    ):
+        assert rule in STYLESHEET, f"stylesheet missing: {rule}"
+
+
+def test_epub_title_comes_from_pdf_metadata(fixtures_dir) -> None:
+    _, data, _ = build_epub(fixtures_dir / "mixed-id-ar.pdf")
+    archive = zipfile.ZipFile(io.BytesIO(data))
+    opf = next(n for n in archive.namelist() if n.endswith(".opf"))
+    content = archive.read(opf).decode("utf-8")
+    assert "Riyadhus Shalihin Terjemah" in content
+    assert "Imam Muslim" in content
+
+
 def test_validator_flags_broken_package() -> None:
     broken = io.BytesIO()
     with zipfile.ZipFile(broken, "w") as zf:

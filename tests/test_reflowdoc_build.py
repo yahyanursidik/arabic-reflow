@@ -97,6 +97,13 @@ def test_vocalized_fixture_keeps_harakat_through_pipeline(fixtures_dir) -> None:
     assert all(p.dir == "rtl" and p.lang == "ar" for p in paragraphs)
 
 
+def test_book_metadata_flows_from_pdf_info_dictionary(fixtures_dir) -> None:
+    result = build_reflowdoc(fixtures_dir / "mixed-id-ar.pdf")
+    metadata = result.document.metadata
+    assert metadata.title == "Riyadhus Shalihin Terjemah"
+    assert metadata.author == ["Imam Muslim", "Yahya ibn Syaraf an-Nawawi"]
+
+
 def test_two_column_reading_order_in_reflowdoc(fixtures_dir) -> None:
     result = build_reflowdoc(fixtures_dir / "two-column.pdf")
     blocks = _blocks_of(result.document)

@@ -338,6 +338,36 @@ FIXTURES: dict[str, tuple[callable, callable]] = {
 }
 
 
+FIXTURE_METADATA: dict[str, dict[str, str]] = {
+    "indonesian-native.pdf": {
+        "title": "Kitab Hadits Pilihan",
+        "author": "Yahya ibn Syaraf an-Nawawi",
+    },
+    "arabic-native.pdf": {
+        "title": "الفتوحات الربانية",
+        "author": "ابن قيم الجوزية",
+    },
+    "mixed-id-ar.pdf": {
+        "title": "Riyadhus Shalihin Terjemah",
+        "author": "Imam Muslim, Yahya ibn Syaraf an-Nawawi",
+    },
+    "arabic-vocalized.pdf": {
+        "title": "Matan Al-Arba'in",
+        "author": "Imam an-Nawawi",
+    },
+    "arabic-numbers.pdf": {
+        "title": "Mukhtashar Shahih Muslim",
+    },
+    "footnote-heavy.pdf": {
+        "title": "Shahih al-Bukhari Berfootnote",
+        "author": "Muhammad ibn Ismail al-Bukhari",
+    },
+    "image-caption.pdf": {
+        "title": "Panduan Rekonstruksi Bergambar",
+    },
+}
+
+
 def main() -> int:
     writer = FixtureWriter()
     failures: list[str] = []
@@ -345,6 +375,9 @@ def main() -> int:
         FIXTURES_DIR.mkdir(parents=True, exist_ok=True)
         for filename, (builder, verify) in FIXTURES.items():
             doc = builder(writer)
+            metadata = {"title": Path(filename).stem, "author": ""}
+            metadata.update(FIXTURE_METADATA.get(filename, {}))
+            doc.set_metadata(metadata)
             target = FIXTURES_DIR / filename
             doc.save(target, deflate=True)
             doc.close()

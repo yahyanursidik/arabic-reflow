@@ -101,6 +101,12 @@ def test_scanned_page_has_no_text_blocks_but_images(fixtures_dir) -> None:
     assert (x1 - x0) > page.width * 0.9  # full-page scan
 
 
+def test_pdf_metadata_captured(fixtures_dir) -> None:
+    raw = extract(fixtures_dir / "mixed-id-ar.pdf")
+    assert raw.pdf_title == "Riyadhus Shalihin Terjemah"
+    assert raw.pdf_author == "Imam Muslim, Yahya ibn Syaraf an-Nawawi"
+
+
 def test_encrypted_pdf_refuses_extraction(tmp_path) -> None:
     import pymupdf
 

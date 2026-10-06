@@ -96,3 +96,5 @@ class RawDocument(BaseModel):
     source_filename: str | None = None
     page_count: int = Field(ge=0)
     pages: list[RawPage] = Field(default_factory=list)
+    pdf_title: str | None = Field(default=None, description="Title from the PDF info dictionary")
+    pdf_author: str | None = Field(default=None, description="Author string from the PDF info dictionary")

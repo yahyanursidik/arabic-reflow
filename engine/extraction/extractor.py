@@ -77,12 +77,15 @@ def extract(source: str | bytes) -> RawDocument:
             raise ValueError("PDF is encrypted; refuse to extract without a password")
         pages = [extract_page(doc.load_page(i), i + 1) for i in range(doc.page_count)]
         _attach_image_contents(doc, pages)
+        info = doc.metadata or {}
         return RawDocument(
             page_count=len(pages),
             pages=pages,
             source_filename=(
                 Path(doc.name).name if not isinstance(source, bytes) else None
             ),
+            pdf_title=(info.get("title") or "").strip() or None,
+            pdf_author=(info.get("author") or "").strip() or None,
         )
     finally:
         doc.close()

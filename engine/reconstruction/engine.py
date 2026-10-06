@@ -9,6 +9,8 @@ detection lands.
 
 from __future__ import annotations
 
+import re
+
 from engine.analyzer.models import DocumentProfile
 from engine.arabic.detector import ScriptClass, classify_block, infer_direction
 from engine.extraction.models import RawDocument, RawImage
@@ -131,6 +133,15 @@ def reconstruct_semantics(
 ) -> ReflowDocument:
     """Build the ReflowDocument from ordered raw pages."""
     doc = new_document(raw.source_filename)
+    # Book metadata: the PDF info dictionary is the honest source when present.
+    if raw.pdf_title:
+        doc.metadata.title = raw.pdf_title
+    if raw.pdf_author:
+        doc.metadata.author = [
+            part.strip()
+            for part in re.split(r"[,&]|\band\b", raw.pdf_author)
+            if part.strip()
+        ][:5]
     chapter = Chapter(id="chapter-001", title=None, level=1, blocks=[])
     sequence = 1
     footnote_pages: list[int] = []
