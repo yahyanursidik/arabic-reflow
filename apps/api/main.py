@@ -65,12 +65,16 @@ def create_app(storage_dir: Path | None = None) -> FastAPI:
 
     app = FastAPI(
         title="Reflow API",
-        version="0.7.1",
+        version="0.7.2",
         description="Mixed Arabic-Latin PDF to reflowable EPUB 3 conversion.",
     )
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=["http://localhost:3000", "http://127.0.0.1:3000"],
+        allow_origins=[
+            "http://localhost:3000",
+            "http://127.0.0.1:3000",
+            "http://[::1]:3000",
+        ],
         allow_methods=["*"],
         allow_headers=["*"],
     )

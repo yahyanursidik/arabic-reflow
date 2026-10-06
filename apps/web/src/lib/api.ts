@@ -1,6 +1,8 @@
 /**
  * Typed API client for the Reflow backend.
- * Base URL: NEXT_PUBLIC_API_URL (docker-compose sets it), default localhost:8000.
+ * Base URL: NEXT_PUBLIC_API_URL (docker-compose sets it), default
+ * http://127.0.0.1:8000 — explicit IPv4, because `localhost` resolves to ::1
+ * on some browsers and the API binds IPv4 only.
  */
 
 import {
@@ -18,7 +20,7 @@ import {
   parseReport,
 } from "./contract";
 
-const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8000";
+const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
 
 export class ApiError extends Error {
   constructor(

@@ -3,6 +3,7 @@
 import { useMemo, useState } from "react";
 
 import { UiBlock, UiReflow, UiReport } from "@/lib/contract";
+import { collapseWarnings, compactMessage, warningInfo } from "@/lib/warnings";
 
 type Filter =
   | "all"
@@ -12,16 +13,30 @@ type Filter =
   | "footnotes"
   | "edited";
 
-const FILTERS: { id: Filter; label: string }[] = [
-  { id: "all", label: "Semua" },
-  { id: "arabic-issues", label: "Masalah Arab" },
-  { id: "reading-order", label: "Urutan baca" },
-  { id: "ocr", label: "OCR" },
-  { id: "footnotes", label: "Catatan kaki" },
-  { id: "edited", label: "Disunting" },
-];
+const TYPE_LABELS: Record<string, string> = {
+  paragraph: "Paragraf",
+  heading: "Judul",
+  quote: "Kutipan",
+  list: "Daftar",
+  image: "Gambar",
+  table: "Tabel",
+  footnote: "Catatan kaki",
+  page_break: "Pemisah halaman",
+};
 
-function matches(block: UiBlock, filter: Filter): boolean {
+function typeLabel(block: UiBlock): string {
+  return TYPE_LABELS[block.type] ?? block.type;
+}
+
+function needsReview(block: UiBlock, lowConfidence: Set<string>): boolean {
+  return (
+    lowConfidence.has(block.id) ||
+    (block.integrityScore !== undefined && block.integrityScore < 0.85) ||
+    block.warnings.some((code) => warningInfo(code).needsReview)
+  );
+}
+
+function matches(block: UiBlock, filter: Filter, lowConfidence: Set<string>): boolean {
   switch (filter) {
     case "all":
       return true;
@@ -39,6 +54,13 @@ function matches(block: UiBlock, filter: Filter): boolean {
     case "edited":
       return block.modifiedByUser;
   }
+}
+
+/** Short single-line excerpt that survives Arabic/RTL blocks. */
+function excerpt(block: UiBlock, max = 56): string {
+  const text = block.text.replace(/\s+/g, " ").trim();
+  if (!text) return typeLabel(block);
+  return text.length > max ? `${text.slice(0, max)}…` : text;
 }
 
 export function BlockInspector({
@@ -70,11 +92,38 @@ export function BlockInspector({
   const [acting, setActing] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  const lowConfidence = useMemo(
+    () => new Set(report?.integrity?.lowConfidenceBlockIds ?? []),
+    [report],
+  );
+
   const selected = useMemo(
     () => blocks.find((b) => b.id === selectedId) ?? null,
     [blocks, selectedId],
   );
-  const visible = useMemo(() => blocks.filter((b) => matches(b, filter)), [blocks, filter]);
+  const visible = useMemo(
+    () => blocks.filter((b) => matches(b, filter, lowConfidence)),
+    [blocks, filter, lowConfidence],
+  );
+
+  const counts = useMemo(() => {
+    const result: Record<Filter, number> = {
+      all: blocks.length,
+      "arabic-issues": 0,
+      "reading-order": 0,
+      ocr: 0,
+      footnotes: 0,
+      edited: 0,
+    };
+    for (const block of blocks) {
+      for (const option of Object.keys(result) as Filter[]) {
+        if (option !== "all" && matches(block, option, lowConfidence)) {
+          result[option] += 1;
+        }
+      }
+    }
+    return result;
+  }, [blocks, lowConfidence]);
 
   const [draftText, setDraftText] = useState<string | null>(null);
   const [draftLang, setDraftLang] = useState<string | null>(null);
@@ -108,13 +157,13 @@ export function BlockInspector({
     }
   }
 
-  const lowConfidence = new Set(report?.integrity?.lowConfidenceBlockIds ?? []);
   const hasArabic =
     selected !== null && /[\u0600-\u06FF\uFB50-\uFEFF]/.test(selected.text);
   const renderedAsImage =
     selected !== null &&
     selected.type === "image" &&
     selected.warnings.includes("ARABIC_RENDERED_AS_IMAGE");
+  const selectedWarnings = selected ? collapseWarnings(selected.warnings) : [];
 
   async function runAction(action: () => Promise<void>) {
     setActing(true);
@@ -128,14 +177,28 @@ export function BlockInspector({
     }
   }
 
+  const filters: { id: Filter; label: string }[] = [
+    { id: "all", label: "Semua" },
+    { id: "arabic-issues", label: "Masalah Arab" },
+    { id: "reading-order", label: "Urutan baca" },
+    { id: "ocr", label: "OCR" },
+    { id: "footnotes", label: "Catatan kaki" },
+    { id: "edited", label: "Disunting" },
+  ];
+
   return (
     <div className="flex max-h-[70vh] flex-col rounded-card border border-black/8 bg-pure-white text-sm">
       <div className="border-b border-black/8 p-4">
-        <h2 className="text-caption font-semibold uppercase tracking-wide text-stone">
-          Inspektur blok
-        </h2>
+        <div className="flex items-baseline justify-between">
+          <h2 className="text-caption font-semibold uppercase tracking-wide text-stone">
+            Inspektur blok
+          </h2>
+          <span className="text-[11px] text-stone">
+            {visible.length} dari {blocks.length} blok
+          </span>
+        </div>
         <div className="mt-3 flex flex-wrap gap-1.5">
-          {FILTERS.map((option) => (
+          {filters.map((option) => (
             <button
               className={
                 "rounded-pill px-2.5 py-0.5 text-xs font-medium " +
@@ -148,54 +211,93 @@ export function BlockInspector({
               type="button"
             >
               {option.label}
+              {counts[option.id] > 0 ? (
+                <span
+                  className={
+                    "ml-1 " +
+                    (filter === option.id ? "text-pure-white/80" : "text-stone")
+                  }
+                >
+                  {counts[option.id]}
+                </span>
+              ) : null}
             </button>
           ))}
         </div>
       </div>
 
-      <ul className="max-h-56 overflow-y-auto border-b border-black/8">
-        {visible.map((block) => (
-          <li key={block.id}>
-            <button
-              className={
-                "flex w-full items-baseline justify-between gap-2 px-4 py-1.5 text-left hover:bg-paper-warmth " +
-                (selectedId === block.id ? "bg-sky-tint/60" : "")
-              }
-              onClick={() => select(block)}
-              type="button"
-            >
-              <span className="truncate text-ink-black/95">
-                {lowConfidence.has(block.id) ? (
-                  <span className="text-vermillion">[!] </span>
-                ) : null}
-                {block.modifiedByUser ? (
-                  <span className="text-notion-blue">[disunting] </span>
-                ) : null}
-                {block.text.slice(0, 60) || `[${block.type}]`}
-              </span>
-              <span className="shrink-0 text-xs text-stone">
-                {block.type}
-                {block.page ? ` · hlm ${block.page}` : ""}
-              </span>
-            </button>
-          </li>
-        ))}
+      {/* Block list: grows with the pane, always scrollable */}
+      <ul className="min-h-32 flex-1 overflow-y-auto border-b border-black/8">
+        {visible.map((block) => {
+          const flagged = needsReview(block, lowConfidence);
+          const isSelected = selectedId === block.id;
+          return (
+            <li key={block.id}>
+              <button
+                aria-current={isSelected ? "true" : undefined}
+                className={
+                  "flex w-full items-center gap-2 border-l-2 px-3 py-1.5 text-left transition-colors " +
+                  (isSelected
+                    ? "border-notion-blue bg-sky-tint/60"
+                    : "border-transparent hover:bg-paper-warmth")
+                }
+                onClick={() => select(block)}
+                type="button"
+              >
+                <span
+                  aria-hidden
+                  className={
+                    "h-2 w-2 shrink-0 rounded-full " +
+                    (flagged
+                      ? "bg-vermillion"
+                      : block.warnings.length > 0
+                        ? "bg-saffron"
+                        : block.modifiedByUser
+                          ? "bg-notion-blue"
+                          : "bg-black/15")
+                  }
+                  title={
+                    flagged
+                      ? "Perlu ditinjau"
+                      : block.warnings.length > 0
+                        ? "Ada catatan"
+                        : block.modifiedByUser
+                          ? "Disunting"
+                          : "Sehat"
+                  }
+                />
+                <span
+                  className={
+                    "min-w-0 flex-1 truncate " +
+                    (isSelected ? "text-ink-black" : "text-ink-black/90")
+                  }
+                  dir={block.dir ?? undefined}
+                >
+                  {excerpt(block)}
+                </span>
+                <span className="shrink-0 text-[11px] text-stone">
+                  {typeLabel(block)}
+                  {block.page ? ` · hlm ${block.page}` : ""}
+                </span>
+              </button>
+            </li>
+          );
+        })}
         {visible.length === 0 ? (
-          <li className="px-4 py-2 text-stone">Tidak ada blok pada filter ini.</li>
+          <li className="px-4 py-3 text-stone">Tidak ada blok pada filter ini.</li>
         ) : null}
       </ul>
 
       {selected ? (
         <div className="space-y-3 overflow-y-auto p-4">
-          <dl className="grid grid-cols-2 gap-x-4 gap-y-1 text-xs text-stone">
-            <div>
-              <dt className="inline">ID </dt>
-              <dd className="inline font-medium text-ink-black/90">{selected.id}</dd>
-            </div>
-            <div>
-              <dt className="inline">Tipe </dt>
-              <dd className="inline font-medium text-ink-black/90">{selected.type}</dd>
-            </div>
+          <div className="flex items-baseline justify-between">
+            <p className="font-notioninter text-xs font-semibold text-ink-black">
+              {typeLabel(selected)}
+              {selected.page ? ` · halaman ${selected.page}` : ""}
+            </p>
+            <p className="font-notioninter text-[11px] text-stone">{selected.id}</p>
+          </div>
+          <dl className="grid grid-cols-3 gap-x-4 gap-y-1 text-xs text-stone">
             <div>
               <dt className="inline">Bahasa </dt>
               <dd className="inline font-medium text-ink-black/90">{selected.lang ?? "-"}</dd>
@@ -205,23 +307,33 @@ export function BlockInspector({
               <dd className="inline font-medium text-ink-black/90">{selected.dir ?? "-"}</dd>
             </div>
             <div>
-              <dt className="inline">Confidence </dt>
+              <dt className="inline">Keyakinan </dt>
               <dd className="inline font-medium text-ink-black/90">
                 {selected.confidence !== undefined
                   ? `${Math.round(selected.confidence * 100)}%`
                   : "-"}
               </dd>
             </div>
-            <div>
-              <dt className="inline">Halaman </dt>
-              <dd className="inline font-medium text-ink-black/90">{selected.page ?? "-"}</dd>
-            </div>
           </dl>
 
-          {selected.warnings.length > 0 ? (
-            <p className="rounded-small bg-paper-warmth px-2 py-1 text-xs text-vermillion">
-              {selected.warnings.join(", ")}
-            </p>
+          {selectedWarnings.length > 0 ? (
+            <div className="flex flex-wrap gap-1.5">
+              {selectedWarnings.map((warning) => (
+                <span
+                  className={
+                    "rounded-pill px-2 py-0.5 text-[11px] font-medium " +
+                    (warning.needsReview
+                      ? "bg-[#fdf0e5] text-[#b25e09]"
+                      : "bg-paper-warmth text-stone")
+                  }
+                  key={warning.code}
+                  title={warning.code}
+                >
+                  {warning.label}
+                  {warning.count > 1 ? ` ×${warning.count}` : ""}
+                </span>
+              ))}
+            </div>
           ) : null}
 
           {renderedAsImage ? (
@@ -286,6 +398,8 @@ export function BlockInspector({
               <textarea
                 className="w-full rounded-button border border-black/15 p-2 text-sm text-ink-black focus:border-notion-blue focus:outline-none"
                 id="block-text"
+                dir={selected.dir ?? undefined}
+                lang={selected.lang ?? undefined}
                 onChange={(event) => setDraftText(event.target.value)}
                 rows={4}
                 value={draftText ?? ""}
@@ -331,27 +445,40 @@ export function BlockInspector({
       )}
 
       {report?.warnings.length ? (
-        <div className="border-t border-black/8 p-4">
+        <div className="max-h-44 overflow-y-auto border-t border-black/8 p-4">
           <h3 className="text-caption font-semibold uppercase tracking-wide text-stone">
             Peringatan dokumen
           </h3>
-          <ul className="mt-1 space-y-0.5 text-xs text-graphite">
-            {report.warnings.map((warning, index) => (
-              <li key={index}>
-                <span
-                  className={
-                    warning.severity === "error"
-                      ? "font-medium text-vermillion"
-                      : warning.severity === "warning"
-                        ? "text-saffron"
-                        : "text-stone"
-                  }
-                >
-                  [{warning.code}]
-                </span>
-                {warning.page ? ` (hlm ${warning.page})` : ""} {warning.message}
-              </li>
-            ))}
+          <ul className="mt-1.5 space-y-1">
+            {collapseWarnings(report.warnings.map((w) => w.code)).map(
+              (warning) => {
+                const first = report.warnings.find((w) => w.code === warning.code);
+                return (
+                  <li className="flex gap-1.5 text-xs" key={warning.code}>
+                    <span
+                      aria-hidden
+                      className={
+                        "mt-1 h-1.5 w-1.5 shrink-0 rounded-full " +
+                        (first?.severity === "error"
+                          ? "bg-vermillion"
+                          : first?.severity === "warning"
+                            ? "bg-saffron"
+                            : "bg-black/20")
+                      }
+                    />
+                    <span className="text-graphite">
+                      <span className="font-medium text-ink-black/90">
+                        {warning.label}
+                        {warning.count > 1 ? ` ×${warning.count}` : ""}
+                      </span>
+                      {first?.message ? (
+                        <> — {compactMessage(first.message)}</>
+                      ) : null}
+                    </span>
+                  </li>
+                );
+              },
+            )}
           </ul>
         </div>
       ) : null}
