@@ -14,7 +14,7 @@ Simple y,x sorting is never used alone (ARCHITECTURE.md 3.7):
 
 from __future__ import annotations
 
-from engine.arabic.detector import classify_block
+from engine.arabic.detector import classify_block, script_profile
 from engine.extraction.models import RawBlock, RawDocument
 from engine.layout.columns import find_gutters
 from engine.layout.models import LayoutReport, OrderReport
@@ -50,14 +50,13 @@ def _row_order(blocks: list[RawBlock], rtl: bool) -> list[RawBlock]:
 
 
 def _column_order(
-    blocks: list[RawBlock], gutters: list[float], page_width: float
+    blocks: list[RawBlock], gutters: list[float], page_width: float, rtl: bool = False
 ) -> list[RawBlock]:
     """Order blocks column by column, keeping full-width blocks in place.
 
     Gutters partition the page into N+1 column regions. Blocks lying fully
-    inside one region read top-to-bottom; regions read left-to-right (in
-    logical order — RTL column layouts remain a known limitation, see
-    docs/reconstruction.md). Blocks crossing any gutter are section
+    inside one region read top-to-bottom; regions follow the dominant page
+    direction. Blocks crossing any gutter are section
     separators and stay at their vertical position.
     """
     boundaries = [float("-inf")] + list(gutters) + [float("inf")]
@@ -80,13 +79,16 @@ def _column_order(
         column.sort(key=lambda b: b.bbox[1])
     full.sort(key=lambda b: b.bbox[1])
 
-    segment_tops = [float("-inf")] + [f.bbox[3] for f in full]
+    # Assign each column block exactly once using its top edge, including
+    # blocks that overlap a spanning separator's vertical bounds. Requiring
+    # both top and bottom to fit a segment used to silently drop such blocks.
+    segment_tops = [float("-inf")] + [f.bbox[1] for f in full]
     segment_bottoms = [f.bbox[1] for f in full] + [float("inf")]
     result: list[RawBlock] = []
     for segment in range(len(full) + 1):
         top, bottom = segment_tops[segment], segment_bottoms[segment]
-        for column in columns:
-            result.extend(b for b in column if b.bbox[1] >= top and b.bbox[3] <= bottom)
+        for column in reversed(columns) if rtl else columns:
+            result.extend(b for b in column if top <= b.bbox[1] < bottom)
         if segment < len(full):
             result.append(full[segment])
     return result
@@ -94,6 +96,9 @@ def _column_order(
 
 def _page_is_rtl(blocks: list[RawBlock]) -> bool:
     page_text = "\n".join(b.text for b in blocks)
+    profile = script_profile(page_text)
+    if profile.arabic_letters != profile.latin_letters:
+        return profile.arabic_letters > profile.latin_letters
     return classify_block(page_text).dir is Direction.RTL
 
 
@@ -116,7 +121,7 @@ def reconstruct_reading_order(
         text_blocks = [b for b in page.blocks if b.type == "text" and b.text.strip()]
         gutters = find_gutters([b.bbox for b in page.blocks], 0.0, page.width)
         if gutters and len(text_blocks) >= 4:
-            ordered = _column_order(text_blocks, gutters, page.width)
+            ordered = _column_order(text_blocks, gutters, page.width, _page_is_rtl(text_blocks))
             page_confidence = 0.85 if len(gutters) == 1 else 0.8
             gutters_record = [round(g, 1) for g in gutters]
         else:

@@ -103,9 +103,11 @@ diffs stay stable.
   single-column pages); unindented quotations fall back to paragraphs.
 - No page_break blocks: ReflowDoc is a flow document; page provenance lives
   in each block's `source.page` and the furniture report.
-- Column handling supports N gutters via recursive splitting (M6-01), but
-  column regions always read left-to-right even on RTL pages — RTL
-  multi-column ordering is a known limitation for M6 refinement.
+- Column handling supports N gutters via recursive splitting. Regions now
+  follow the page's dominant Arabic/Latin letter distribution (RTL reads
+  right-to-left); a Latin header alone no longer overrides an Arabic body.
+  Blocks overlapping a spanning separator's vertical bounds are assigned
+  once by their top edge rather than being silently dropped.
 - Footnote *detection* is heuristic zoning (bottom quarter, small font,
   numbered marker) and emits `FOOTNOTE_UNCERTAIN`; body-text marker linking
   (noterefs) is not implemented yet (M6-04 refinement).
@@ -140,7 +142,7 @@ diffs stay stable.
 
 - **N-column reading order** (`engine/layout/columns.find_gutters` +
   `_column_order`): recursive gutter detection per region, columns read
-  left-to-right between full-width section separators; confidence 0.8 for
+  in the page's dominant direction between full-width separators; confidence 0.8 for
   multi-gutter pages.
 - **Footnotes** (`engine/layout/footnotes.py`): bottom-quarter small-font
   numbered blocks become `FootnoteBlock(marker=…)` with an inner paragraph;

@@ -20,6 +20,10 @@ STAGES = (
 )
 
 
+class ConversionInProgress(Exception):
+    pass
+
+
 class JobState(BaseModel):
     id: str
     document_id: str
@@ -39,43 +43,43 @@ class JobStore:
         self._storage = storage
         self._jobs: dict[str, JobState] = {}
         self._lock = threading.Lock()
+        self._latest: dict[str, str] = {}
+        for directory in storage.documents_dir.iterdir():
+            if not storage.exists(directory.name):
+                continue
+            persisted = storage.read_job(directory.name)
+            if persisted:
+                job = JobState.model_validate(persisted)
+                if job.status in ("queued", "processing"):
+                    job.status = "failed"
+                    job.stage = "failed"
+                    job.error = "Server restarted during conversion. Please retry."
+                    self._persist(job)
+                self._jobs[job.id] = job
+                self._latest[job.document_id] = job.id
 
     def create(self, document_id: str) -> JobState:
         import uuid
 
         job = JobState(id=uuid.uuid4().hex, document_id=document_id)
         with self._lock:
+            previous = self._jobs.get(self._latest.get(document_id, ""))
+            if previous and previous.status in ("queued", "processing"):
+                raise ConversionInProgress(document_id)
             self._jobs[job.id] = job
-        self._persist(job)
-        return job
+            self._latest[document_id] = job.id
+            self._persist(job)
+            return job.model_copy(deep=True)
 
     def get(self, job_id: str) -> JobState | None:
         with self._lock:
             job = self._jobs.get(job_id)
-        if job is not None:
-            return job
-        # Disk fallback (e.g. after a restart): the document's last job.
-        for meta_dir in (self._storage.documents_dir).iterdir():
-            persisted = self._storage.read_job(meta_dir.name)
-            if persisted and persisted.get("id") == job_id:
-                restored = JobState.model_validate(persisted)
-                with self._lock:
-                    self._jobs[job_id] = restored
-                return restored
-        return None
+            return job.model_copy(deep=True) if job else None
 
     def get_for_document(self, document_id: str) -> JobState | None:
         with self._lock:
-            for job in self._jobs.values():
-                if job.document_id == document_id:
-                    return job
-        persisted = self._storage.read_job(document_id)
-        if persisted:
-            restored = JobState.model_validate(persisted)
-            with self._lock:
-                self._jobs[restored.id] = restored
-            return restored
-        return None
+            job = self._jobs.get(self._latest.get(document_id, ""))
+            return job.model_copy(deep=True) if job else None
 
     def update(
         self, job_id: str, *, status: str | None = None, stage: str | None = None,
@@ -97,8 +101,8 @@ class JobStore:
             if error is not None:
                 job.error = error
             job.updated_at = datetime.now(timezone.utc).isoformat(timespec="seconds")
-            snapshot = job.model_copy()
-        self._persist(snapshot)
+            snapshot = job.model_copy(deep=True)
+            self._persist(snapshot)
         return snapshot
 
     def _persist(self, job: JobState) -> None:

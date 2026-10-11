@@ -120,7 +120,7 @@ def _mixed_document() -> ReflowDocument:
 
 def test_heading_and_paragraph_render_semantically() -> None:
     html = chapter_xhtml(_mixed_document(), _mixed_document().chapters[0])
-    assert '<h1 lang="id" dir="ltr">Bab Pertama</h1>' in html
+    assert '<h1 lang="id" dir="ltr" id="block-001">Bab Pertama</h1>' in html
     assert '<p lang="id" dir="ltr">' in html
     assert '<blockquote class="arabic" lang="ar" dir="rtl">' in html
     assert "<ol" in html and "<li>" in html and "Item satu." in html
@@ -136,6 +136,20 @@ def test_arabic_block_gets_lang_dir_and_class() -> None:
 def test_inline_arabic_renders_inside_bdi() -> None:
     html = chapter_xhtml(_mixed_document(), _mixed_document().chapters[0])
     assert '<bdi lang="ar" dir="rtl">أبي هريرة</bdi>' in html
+
+
+@pytest.mark.parametrize(
+    "text", [" أَبِي هُرَيْرَةَ ", " أبي هريرة ", " العربية، ", " \t", " Latin "]
+)
+def test_inline_boundary_spaces_stay_outside_isolation_without_text_changes(text):
+    from engine.reflowdoc.models import SpanNode
+    from engine.epub.xhtml import _span_node
+
+    node = SpanNode(text=text, lang="ar", script="Arabic", dir="rtl")
+    rendered = _parse(f"<p>Before{_span_node(node)}After</p>")
+    assert "".join(rendered.itertext()) == f"Before{text}After"
+    isolated = rendered.find("bdi").text or ""
+    assert isolated.strip() == isolated
 
 
 def test_text_is_escaped_not_altered() -> None:
@@ -224,8 +238,9 @@ def test_stylesheet_carries_book_typography() -> None:
     from engine.epub.css import STYLESHEET
 
     for rule in (
-        "hyphens: auto",           # Latin hyphenation via lang attributes
-        "text-align: justify",     # book-style body
+        "hyphens: none",           # stable word boundaries for mixed scripts
+        "text-align: start",       # avoid stretched spacing on narrow screens
+        "max-width: 38em",         # bounded line length on tablets/desktops
         "widows: 2",               # no stranded lines at breaks
         "orphans: 2",
         "h1 { font-size: 1.85em; }",  # restrained heading scale
@@ -262,3 +277,43 @@ def test_validator_accepts_generated_epub(fixtures_dir) -> None:
     assert report.ok
     codes = [i.code for i in report.issues]
     assert "XHTML_MALFORMED" not in codes
+
+
+def test_source_image_heading_remains_in_reading_order_and_navigation():
+    document = ReflowDocument.model_validate({
+        "metadata": {"title": "Book", "languages": ["id"]},
+        "resources": [{"id": "source", "kind": "image", "filename": "source.png",
+                       "media_type": "image/png", "content": "cG5n"}],
+        "chapters": [{"id": "c", "blocks": [
+            {"id": "four", "type": "heading", "level": 2, "text": "4. Fourth"},
+            {"id": "five", "type": "image", "heading_level": 2,
+             "resource_id": "source", "alt": "5. Fifth"},
+            {"id": "six", "type": "heading", "level": 2, "text": "6. Sixth"},
+        ]}],
+    })
+    with zipfile.ZipFile(io.BytesIO(render_epub(document))) as archive:
+        chapter = _parse(archive.read("EPUB/chapter-001.xhtml").decode())
+        headings = chapter.findall(f".//{{{XHTML_NS}}}h2")
+        assert [h.attrib["id"] for h in headings] == ["four", "five", "six"]
+        assert headings[1].find(f"{{{XHTML_NS}}}img").attrib == {
+            "src": "resources/source.png", "alt": "5. Fifth",
+        }
+        nav = _parse(archive.read("EPUB/nav.xhtml").decode())
+        links = nav.findall(f".//{{{XHTML_NS}}}a")
+        assert [a.text for a in links if "#" in a.attrib["href"]] == [
+            "4. Fourth", "5. Fifth", "6. Sixth",
+        ]
+
+
+def test_nested_source_images_are_not_dropped_from_footnotes_or_lists():
+    image = {"id": "img", "type": "image", "resource_id": "source", "alt": "Arabic source"}
+    document = ReflowDocument.model_validate({
+        "resources": [{"id": "source", "kind": "image", "filename": "source.png"}],
+        "chapters": [{"id": "c", "blocks": [
+            {"id": "note", "type": "footnote", "marker": "1", "blocks": [image]},
+            {"id": "list", "type": "list", "ordered": False,
+             "items": [{"blocks": [{**image, "id": "img2"}]}]},
+        ]}],
+    })
+    root = _parse(chapter_xhtml(document, document.chapters[0]))
+    assert len(root.findall(f".//{{{XHTML_NS}}}img")) == 2

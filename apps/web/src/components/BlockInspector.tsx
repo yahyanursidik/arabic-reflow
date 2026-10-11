@@ -1,19 +1,15 @@
 "use client";
 
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
+import { BlockUpdate, TextRepairResult, UiBlock, UiReflow, UiReport } from "@/lib/contract";
+import { needsReview, repairCandidates, searchKey } from "@/lib/review";
+import { collapseWarnings, compactMessage } from "@/lib/warnings";
+import { ErrorNotice } from "./Feedback";
+import { ImageAltEditor } from "./ImageAltEditor";
 
-import { UiBlock, UiReflow, UiReport } from "@/lib/contract";
-import { collapseWarnings, compactMessage, warningInfo } from "@/lib/warnings";
-
-type Filter =
-  | "all"
-  | "arabic-issues"
-  | "reading-order"
-  | "ocr"
-  | "footnotes"
-  | "edited";
-
-const TYPE_LABELS: Record<string, string> = {
+type Update = BlockUpdate;
+type Filter = "all" | "review" | "arabic" | "ocr" | "edited";
+const labels: Record<string, string> = {
   paragraph: "Paragraf",
   heading: "Judul",
   quote: "Kutipan",
@@ -24,463 +20,561 @@ const TYPE_LABELS: Record<string, string> = {
   page_break: "Pemisah halaman",
 };
 
-function typeLabel(block: UiBlock): string {
-  return TYPE_LABELS[block.type] ?? block.type;
-}
-
-function needsReview(block: UiBlock, lowConfidence: Set<string>): boolean {
-  return (
-    lowConfidence.has(block.id) ||
-    (block.integrityScore !== undefined && block.integrityScore < 0.85) ||
-    block.warnings.some((code) => warningInfo(code).needsReview)
+function BlockEditor({
+  block,
+  disabled,
+  onSave,
+  onDirtyChange,
+}: {
+  block: UiBlock;
+  disabled: boolean;
+  onSave: (id: string, update: Update) => Promise<void>;
+  onDirtyChange: (dirty: boolean) => void;
+}) {
+  const [text, setText] = useState(block.text);
+  const [lang, setLang] = useState(block.lang ?? "unknown");
+  const [dir, setDir] = useState(block.dir ?? "ltr");
+  const [kind, setKind] = useState<"paragraph" | "heading" | "quote">(
+    block.type as "paragraph" | "heading" | "quote",
   );
-}
+  const [level, setLevel] = useState(block.level ?? 2);
+  const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const [saved, setSaved] = useState(false);
+  const dirty =
+    text !== block.text ||
+    lang !== (block.lang ?? "unknown") ||
+    dir !== (block.dir ?? "ltr") ||
+    kind !== block.type ||
+    (kind === "heading" && level !== (block.level ?? 2));
+  useEffect(() => {
+    onDirtyChange(dirty);
+    return () => onDirtyChange(false);
+  }, [dirty, onDirtyChange]);
 
-function matches(block: UiBlock, filter: Filter, lowConfidence: Set<string>): boolean {
-  switch (filter) {
-    case "all":
-      return true;
-    case "arabic-issues":
-      return (
-        (block.integrityScore !== undefined && block.integrityScore < 0.85) ||
-        block.warnings.some((w) => w.includes("ARABIC"))
+  async function save() {
+    if (!dirty || busy || disabled) return;
+    setBusy(true);
+    setError(null);
+    setSaved(false);
+    try {
+      const update: Update = {};
+      if (text !== block.text) update.text = text;
+      if (lang !== (block.lang ?? "unknown")) update.lang = lang;
+      if (dir !== (block.dir ?? "ltr")) update.dir = dir;
+      if (kind !== block.type) update.type = kind;
+      if (kind === "heading" && (kind !== block.type || level !== block.level))
+        update.level = level;
+      await onSave(block.id, update);
+      setSaved(true);
+    } catch (cause) {
+      setError(
+        cause instanceof Error ? cause.message : "Suntingan gagal disimpan.",
       );
-    case "reading-order":
-      return block.warnings.some((w) => w.includes("READING_ORDER"));
-    case "ocr":
-      return block.warnings.some((w) => w.includes("OCR"));
-    case "footnotes":
-      return block.type === "footnote";
-    case "edited":
-      return block.modifiedByUser;
+    } finally {
+      setBusy(false);
+    }
   }
-}
 
-/** Short single-line excerpt that survives Arabic/RTL blocks. */
-function excerpt(block: UiBlock, max = 56): string {
-  const text = block.text.replace(/\s+/g, " ").trim();
-  if (!text) return typeLabel(block);
-  return text.length > max ? `${text.slice(0, max)}…` : text;
+  return (
+    <form
+      className="mt-5 space-y-4"
+      onSubmit={(event) => {
+        event.preventDefault();
+        void save();
+      }}
+      aria-busy={busy}
+    >
+      <div className="grid gap-3 min-[440px]:grid-cols-2">
+        <div className="text-sm text-stone">
+          <label htmlFor="block-type">Jenis blok</label>
+          <select
+            id="block-type"
+            className="field mt-1"
+            value={kind}
+            disabled={busy || disabled}
+            onChange={(event) => setKind(event.target.value as typeof kind)}
+          >
+            <option value="paragraph">Paragraf</option>
+            <option value="heading">Judul / subjudul</option>
+            <option value="quote">Kutipan</option>
+          </select>
+        </div>
+        {kind === "heading" ? (
+          <div className="text-sm text-stone">
+            <label htmlFor="heading-level">Level judul</label>
+            <select
+              id="heading-level"
+              className="field mt-1"
+              value={level}
+              disabled={busy || disabled}
+              onChange={(event) => setLevel(Number(event.target.value))}
+            >
+              {[1, 2, 3, 4, 5, 6].map((value) => (
+                <option value={value} key={value}>
+                  {value === 1 ? "H1 — judul utama" : `H${value} — subjudul`}
+                </option>
+              ))}
+            </select>
+          </div>
+        ) : null}
+      </div>
+      <label className="block text-sm font-medium" htmlFor="block-text">
+        Teks hasil ekstraksi
+      </label>
+      <textarea
+        id="block-text"
+        className="field min-h-48 text-base leading-relaxed"
+        dir={dir}
+        lang={lang}
+        rows={5}
+        value={text}
+        disabled={busy || disabled}
+        onChange={(event) => {
+          setText(event.target.value);
+          setSaved(false);
+        }}
+      />
+      <div className="grid gap-3 min-[440px]:grid-cols-2">
+        <label className="text-sm text-stone" htmlFor="block-lang">
+          Kode bahasa
+          <input
+            id="block-lang"
+            className="field mt-1"
+            value={lang}
+            placeholder="id, ar, en"
+            disabled={busy || disabled}
+            onChange={(event) => setLang(event.target.value)}
+          />
+        </label>
+        <label className="text-sm text-stone" htmlFor="block-direction">
+          Arah baca
+          <select
+            id="block-direction"
+            className="field mt-1"
+            value={dir}
+            disabled={busy || disabled}
+            onChange={(event) => setDir(event.target.value)}
+          >
+            <option value="ltr">Kiri → kanan</option>
+            <option value="rtl">Kanan → kiri</option>
+          </select>
+        </label>
+      </div>
+      <p className="text-sm leading-relaxed text-stone">
+        Suntingan ini hanya mengubah hasil EPUB, bukan PDF sumber. Teks campuran
+        tetap diberi penanda arah baca.
+      </p>
+      <div className="flex flex-wrap gap-2">
+        <button
+          className="btn-primary"
+          type="submit"
+          disabled={!dirty || !text.trim() || !lang.trim() || busy || disabled}
+        >
+          {busy ? "Menyimpan…" : "Simpan suntingan"}
+        </button>
+        <button
+          className="btn-secondary"
+          type="button"
+          disabled={!dirty || busy || disabled}
+          onClick={() => {
+            setText(block.text);
+            setLang(block.lang ?? "unknown");
+            setDir(block.dir ?? "ltr");
+            setKind(block.type as typeof kind);
+            setLevel(block.level ?? 2);
+            setError(null);
+          }}
+        >
+          Batalkan perubahan
+        </button>
+      </div>
+      <p role="status" className="text-xs text-graphite">
+        {dirty
+          ? "Ada perubahan yang belum disimpan."
+          : saved
+            ? "Suntingan tersimpan."
+            : "Tidak ada perubahan yang belum disimpan."}
+      </p>
+      {error ? <ErrorNotice message={error} /> : null}
+    </form>
+  );
 }
 
 export function BlockInspector({
   blocks,
   report,
-  reflow,
   selectedId,
   onSelect,
   onSave,
   onRenderImage,
   onRestoreText,
-  onNormalizeArabic,
+  onRepairText,
+  onRepairProblems,
+  onDirtyChange,
+  onMove,
+  disabled = false,
 }: {
   blocks: UiBlock[];
   report: UiReport | null;
   reflow: UiReflow;
   selectedId: string | null;
   onSelect: (id: string | null) => void;
-  onSave: (
-    blockId: string,
-    update: { text?: string; lang?: string; dir?: string },
-  ) => Promise<void>;
-  onRenderImage: (blockId: string) => Promise<void>;
-  onRestoreText: (blockId: string) => Promise<void>;
-  onNormalizeArabic: (blockId: string) => Promise<void>;
+  onSave: (id: string, update: Update) => Promise<void>;
+  onRenderImage: (id: string) => Promise<void>;
+  onRestoreText: (id: string) => Promise<void>;
+  onRepairText: (id: string) => Promise<TextRepairResult>;
+  onRepairProblems: (ids: string[]) => Promise<TextRepairResult>;
+  onDirtyChange: (dirty: boolean) => void;
+  onMove: (id: string, direction: "up" | "down") => Promise<void>;
+  disabled?: boolean;
 }) {
   const [filter, setFilter] = useState<Filter>("all");
-  const [saving, setSaving] = useState(false);
+  const [query, setQuery] = useState("");
   const [acting, setActing] = useState(false);
+  const [dirty, setDirty] = useState(false);
   const [error, setError] = useState<string | null>(null);
-
-  const lowConfidence = useMemo(
-    () => new Set(report?.integrity?.lowConfidenceBlockIds ?? []),
+  const [message, setMessage] = useState<string | null>(null);
+  const listRef = useRef<HTMLUListElement>(null);
+  const selected = blocks.find((block) => block.id === selectedId);
+  const low = useMemo(
+    () =>
+      new Set([
+        ...(report?.integrity?.lowConfidenceBlockIds ?? []),
+        ...(report?.quality?.reviewBlockIds ?? []),
+      ]),
     [report],
   );
-
-  const selected = useMemo(
-    () => blocks.find((b) => b.id === selectedId) ?? null,
-    [blocks, selectedId],
+  const filters: { id: Filter; label: string }[] = [
+    { id: "all", label: "Semua" },
+    { id: "review", label: "Perlu ditinjau" },
+    { id: "arabic", label: "Arab" },
+    { id: "ocr", label: "OCR" },
+    { id: "edited", label: "Disunting" },
+  ];
+  const match = (block: UiBlock, value: Filter) =>
+    value === "all" ||
+    (value === "review" && needsReview(block, low)) ||
+    (value === "arabic" && (
+      /\p{Script=Arabic}/u.test(block.text) ||
+      block.warnings.includes("ARABIC_RENDERED_AS_IMAGE")
+    )) ||
+    (value === "ocr" && block.warnings.some((w) => w.includes("OCR"))) ||
+    (value === "edited" && block.modifiedByUser);
+  const visible = blocks.filter(
+    (block) =>
+      match(block, filter) &&
+      searchKey(
+        `${block.text} ${block.alt ?? ""} ${labels[block.type]} ${block.page ?? ""}`,
+      ).includes(searchKey(query)),
   );
-  const visible = useMemo(
-    () => blocks.filter((b) => matches(b, filter, lowConfidence)),
-    [blocks, filter, lowConfidence],
-  );
+  const editable =
+    selected && ["paragraph", "heading", "quote"].includes(selected.type)
+    && !selected.nodes.some((node) => node.kind === "image");
+  const asImage = selected?.warnings.includes("ARABIC_RENDERED_AS_IMAGE");
+  const locked = disabled || acting;
+  const candidates = repairCandidates(blocks, low);
+  const selectedIndex = visible.findIndex((block) => block.id === selectedId);
+  const previous = visible[selectedIndex - 1];
+  const next = visible[selectedIndex + 1];
 
-  const counts = useMemo(() => {
-    const result: Record<Filter, number> = {
-      all: blocks.length,
-      "arabic-issues": 0,
-      "reading-order": 0,
-      ocr: 0,
-      footnotes: 0,
-      edited: 0,
-    };
-    for (const block of blocks) {
-      for (const option of Object.keys(result) as Filter[]) {
-        if (option !== "all" && matches(block, option, lowConfidence)) {
-          result[option] += 1;
-        }
-      }
-    }
-    return result;
-  }, [blocks, lowConfidence]);
+  useEffect(() => {
+    const list = listRef.current;
+    const row = list?.querySelector<HTMLButtonElement>('[aria-current="true"]');
+    if (!list || !row || !list.clientHeight) return;
+    // Scroll only the block list. Selecting a block must not jump the page.
+    list.scrollTop = Math.max(0, row.offsetTop - (list.clientHeight - row.offsetHeight) / 2);
+  }, [selectedId, filter, query]);
 
-  const [draftText, setDraftText] = useState<string | null>(null);
-  const [draftLang, setDraftLang] = useState<string | null>(null);
-  const [draftDir, setDraftDir] = useState<string | null>(null);
-  const [editedId, setEditedId] = useState<string | null>(null);
-
-  function select(block: UiBlock | null) {
-    onSelect(block?.id ?? null);
-    setEditedId(block?.id ?? null);
-    setDraftText(block?.text ?? null);
-    setDraftLang(block?.lang ?? null);
-    setDraftDir(block?.dir ?? null);
+  function choose(id: string) {
+    onSelect(id);
     setError(null);
+    setMessage(null);
   }
 
-  async function save() {
-    if (!selected || editedId !== selected.id) return;
-    setSaving(true);
-    setError(null);
-    try {
-      const update: { text?: string; lang?: string; dir?: string } = {};
-      if (draftText !== null && draftText !== selected.text) update.text = draftText;
-      if (draftLang !== null && draftLang !== selected.lang) update.lang = draftLang;
-      if (draftDir !== null && draftDir !== selected.dir) update.dir = draftDir;
-      if (Object.keys(update).length === 0) return;
-      await onSave(selected.id, update);
-    } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "gagal menyimpan");
-    } finally {
-      setSaving(false);
-    }
-  }
+  // Stable callback so the editor's dirty-state effect does not rerun on each
+  // parent render (polls, search, selection).
+  const dirtyCallback = useMemo(
+    () => (value: boolean) => {
+      setDirty(value);
+      onDirtyChange(value);
+    },
+    [onDirtyChange],
+  );
 
-  const hasArabic =
-    selected !== null && /[\u0600-\u06FF\uFB50-\uFEFF]/.test(selected.text);
-  const renderedAsImage =
-    selected !== null &&
-    selected.type === "image" &&
-    selected.warnings.includes("ARABIC_RENDERED_AS_IMAGE");
-  const selectedWarnings = selected ? collapseWarnings(selected.warnings) : [];
-
-  async function runAction(action: () => Promise<void>) {
+  async function action(run: () => Promise<void | TextRepairResult>, description: string) {
+    if (locked || dirty) return;
     setActing(true);
     setError(null);
+    setMessage(null);
     try {
-      await action();
+      const result = await run();
+      setMessage(result
+        ? `${result.changedBlockIds.length} blok diperbaiki. ${result.unchangedBlockIds.length} blok tanpa perubahan yang aman. ${result.skippedBlockIds.length} blok dilewati. ${result.reviewBlockIds.length} blok tetap perlu ditinjau. Teks awal blok yang diubah dapat dipulihkan.`
+        : description);
     } catch (cause) {
-      setError(cause instanceof Error ? cause.message : "aksi gagal");
+      setError(
+        cause instanceof Error ? cause.message : "Tindakan gagal. Coba lagi.",
+      );
     } finally {
       setActing(false);
     }
   }
 
-  const filters: { id: Filter; label: string }[] = [
-    { id: "all", label: "Semua" },
-    { id: "arabic-issues", label: "Masalah Arab" },
-    { id: "reading-order", label: "Urutan baca" },
-    { id: "ocr", label: "OCR" },
-    { id: "footnotes", label: "Catatan kaki" },
-    { id: "edited", label: "Disunting" },
-  ];
-
   return (
-    <div className="flex max-h-[70vh] flex-col rounded-card border border-black/8 bg-pure-white text-sm">
-      <div className="border-b border-black/8 p-4">
-        <div className="flex items-baseline justify-between">
-          <h2 className="text-caption font-semibold uppercase tracking-wide text-stone">
-            Inspektur blok
-          </h2>
-          <span className="text-[11px] text-stone">
-            {visible.length} dari {blocks.length} blok
-          </span>
-        </div>
-        <div className="mt-3 flex flex-wrap gap-1.5">
+    <div className="block-inspector min-w-0 rounded-card border border-black/10 bg-white text-base">
+      <div className="border-b border-black/10 p-5 sm:p-6">
+        <h2 className="text-lg font-semibold">Periksa & sunting blok</h2>
+        <label className="sr-only" htmlFor="block-search">
+          Cari teks, jenis blok, atau halaman
+        </label>
+        <input
+          id="block-search"
+          type="search"
+          className="field mt-4 text-base"
+          placeholder="Cari teks atau halaman…"
+          value={query}
+          onChange={(event) => setQuery(event.target.value)}
+        />
+        <div className="mt-4 flex flex-wrap gap-2">
           {filters.map((option) => (
             <button
-              className={
-                "rounded-pill px-2.5 py-0.5 text-xs font-medium " +
-                (filter === option.id
-                  ? "bg-notion-blue text-pure-white"
-                  : "bg-paper-warmth text-ink-black/90 hover:bg-sky-tint hover:text-notion-blue")
-              }
               key={option.id}
-              onClick={() => setFilter(option.id)}
               type="button"
+              aria-pressed={filter === option.id}
+              onClick={() => setFilter(option.id)}
+              className={`min-h-11 whitespace-nowrap rounded-button px-3 py-2 text-sm font-medium ${filter === option.id ? "bg-notion-blue text-white" : "bg-paper-warmth text-graphite hover:bg-sky-tint"}`}
             >
-              {option.label}
-              {counts[option.id] > 0 ? (
-                <span
-                  className={
-                    "ml-1 " +
-                    (filter === option.id ? "text-pure-white/80" : "text-stone")
-                  }
-                >
-                  {counts[option.id]}
-                </span>
-              ) : null}
+              {option.label}{" "}
+              <span>
+                {blocks.filter((block) => match(block, option.id)).length}
+              </span>
             </button>
           ))}
         </div>
+        <p className="mt-3 text-sm text-stone">
+          {visible.length} dari {blocks.length} blok
+        </p>
+        <button
+          type="button"
+          className="btn-secondary mt-4 w-full"
+          disabled={locked || dirty || candidates.length === 0}
+          onClick={() => void action(
+            () => onRepairProblems(candidates.map((block) => block.id)),
+            "Perbaikan otomatis selesai.",
+          )}
+        >
+          {acting ? "Memproses…" : `Perbaiki otomatis (${candidates.length})`}
+        </button>
+        <p className="mt-3 text-sm leading-relaxed text-stone">
+          Mencakup seluruh dokumen, melewati blok yang sudah disunting. Kata OCR
+          yang meragukan tetap perlu diperiksa.
+        </p>
+        {message ? <p role="status" className="mt-3 text-xs text-notion-blue">{message}</p> : null}
+        {error ? <div className="mt-3"><ErrorNotice message={error} /></div> : null}
       </div>
-
-      {/* Block list: grows with the pane, always scrollable */}
-      <ul className="min-h-32 flex-1 overflow-y-auto border-b border-black/8">
-        {visible.map((block) => {
-          const flagged = needsReview(block, lowConfidence);
-          const isSelected = selectedId === block.id;
-          return (
-            <li key={block.id}>
-              <button
-                aria-current={isSelected ? "true" : undefined}
-                className={
-                  "flex w-full items-center gap-2 border-l-2 px-3 py-1.5 text-left transition-colors " +
-                  (isSelected
-                    ? "border-notion-blue bg-sky-tint/60"
-                    : "border-transparent hover:bg-paper-warmth")
-                }
-                onClick={() => select(block)}
-                type="button"
-              >
-                <span
-                  aria-hidden
-                  className={
-                    "h-2 w-2 shrink-0 rounded-full " +
-                    (flagged
-                      ? "bg-vermillion"
-                      : block.warnings.length > 0
-                        ? "bg-saffron"
-                        : block.modifiedByUser
-                          ? "bg-notion-blue"
-                          : "bg-black/15")
-                  }
-                  title={
-                    flagged
-                      ? "Perlu ditinjau"
-                      : block.warnings.length > 0
-                        ? "Ada catatan"
-                        : block.modifiedByUser
-                          ? "Disunting"
-                          : "Sehat"
-                  }
-                />
-                <span
-                  className={
-                    "min-w-0 flex-1 truncate " +
-                    (isSelected ? "text-ink-black" : "text-ink-black/90")
-                  }
-                  dir={block.dir ?? undefined}
-                >
-                  {excerpt(block)}
+      <ul ref={listRef} aria-label="Daftar blok" className="relative max-h-72 min-h-24 overflow-y-auto overscroll-contain border-b border-black/10 py-2">
+        {visible.map((block) => (
+          <li key={block.id}>
+            <button
+              type="button"
+              disabled={locked}
+              aria-current={block.id === selectedId ? "true" : undefined}
+              onClick={() => choose(block.id)}
+              className={`flex min-h-16 w-full items-start gap-3 border-l-2 px-4 py-3 text-left ${block.id === selectedId ? "border-notion-blue bg-sky-tint" : "border-transparent hover:bg-paper-warmth"}`}
+            >
+              <span
+                className={`mt-2 h-2 w-2 shrink-0 rounded-full ${needsReview(block, low) ? "bg-vermillion" : "bg-black/20"}`}
+                aria-hidden="true"
+              />
+              <span className="min-w-0 flex-1">
+                <span className="block line-clamp-2 break-words leading-relaxed" dir="auto">
+                  {block.text.replace(/\s+/g, " ").trim() || block.alt || labels[block.type]}
                 </span>
-                <span className="shrink-0 text-[11px] text-stone">
-                  {typeLabel(block)}
-                  {block.page ? ` · hlm ${block.page}` : ""}
+                <span className="mt-1 block text-sm text-stone">
+                  {labels[block.type]}{block.page ? ` · Hlm ${block.page}` : ""}
                 </span>
-              </button>
-            </li>
-          );
-        })}
-        {visible.length === 0 ? (
-          <li className="px-4 py-3 text-stone">Tidak ada blok pada filter ini.</li>
+              </span>
+              {needsReview(block, low) ? (
+                <span className="sr-only">Perlu ditinjau</span>
+              ) : null}
+            </button>
+          </li>
+        ))}
+        {!visible.length ? (
+          <li className="p-4 text-sm text-stone">
+            Tidak ada blok yang cocok. Coba kata kunci atau filter lain.
+          </li>
         ) : null}
       </ul>
-
-      {selected ? (
-        <div className="space-y-3 overflow-y-auto p-4">
-          <div className="flex items-baseline justify-between">
-            <p className="font-notioninter text-xs font-semibold text-ink-black">
-              {typeLabel(selected)}
-              {selected.page ? ` · halaman ${selected.page}` : ""}
-            </p>
-            <p className="font-notioninter text-[11px] text-stone">{selected.id}</p>
+      <div className="p-5 sm:p-6">
+        <nav aria-label="Navigasi blok" className="mb-5 border-b border-black/10 pb-5">
+          <div className="grid gap-3 min-[440px]:grid-cols-2">
+            <button type="button" className="btn-secondary whitespace-nowrap" aria-label="Blok sebelumnya"
+              disabled={locked || !previous} onClick={() => previous && choose(previous.id)}>
+              ← Sebelumnya
+            </button>
+            <button type="button" className="btn-secondary whitespace-nowrap" aria-label="Blok berikutnya"
+              disabled={locked || !next} onClick={() => next && choose(next.id)}>
+              Berikutnya →
+            </button>
           </div>
-          <dl className="grid grid-cols-3 gap-x-4 gap-y-1 text-xs text-stone">
-            <div>
-              <dt className="inline">Bahasa </dt>
-              <dd className="inline font-medium text-ink-black/90">{selected.lang ?? "-"}</dd>
-            </div>
-            <div>
-              <dt className="inline">Arah </dt>
-              <dd className="inline font-medium text-ink-black/90">{selected.dir ?? "-"}</dd>
-            </div>
-            <div>
-              <dt className="inline">Keyakinan </dt>
-              <dd className="inline font-medium text-ink-black/90">
-                {selected.confidence !== undefined
-                  ? `${Math.round(selected.confidence * 100)}%`
-                  : "-"}
-              </dd>
-            </div>
-          </dl>
-
-          {selectedWarnings.length > 0 ? (
-            <div className="flex flex-wrap gap-1.5">
-              {selectedWarnings.map((warning) => (
-                <span
-                  className={
-                    "rounded-pill px-2 py-0.5 text-[11px] font-medium " +
-                    (warning.needsReview
-                      ? "bg-[#fdf0e5] text-[#b25e09]"
-                      : "bg-paper-warmth text-stone")
-                  }
-                  key={warning.code}
-                  title={warning.code}
-                >
-                  {warning.label}
-                  {warning.count > 1 ? ` ×${warning.count}` : ""}
+          <p className="mt-3 text-sm text-stone" aria-live="polite">
+            {selectedIndex >= 0 ? `Blok ${selectedIndex + 1} dari ${visible.length}`
+              : selected ? "Pilihan saat ini di luar hasil pencarian." : "Pilih blok dari daftar atau pratinjau."}
+          </p>
+        </nav>
+        {selected ? (
+          <>
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <h3 className="text-lg font-semibold">
+                {labels[selected.type]}
+                {selected.page ? ` · halaman ${selected.page}` : ""}
+              </h3>
+              {selected.modifiedByUser ? (
+                <span className="text-xs text-notion-blue">
+                  Disunting pengguna
                 </span>
-              ))}
-            </div>
-          ) : null}
-
-          {renderedAsImage ? (
-            <div className="space-y-2">
-              <p className="text-xs text-graphite">
-                Blok ini dirender sebagai gambar dari halaman sumber (piksel
-                apa adanya). Teks asli tersimpan dan bisa dikembalikan.
-              </p>
-              <button
-                className="rounded-button bg-sky-tint px-3 py-1.5 text-xs font-medium text-notion-blue hover:opacity-80 disabled:opacity-40"
-                disabled={acting}
-                onClick={() => void runAction(() => onRestoreText(selected.id))}
-                type="button"
-              >
-                Kembalikan ke teks
-              </button>
-            </div>
-          ) : null}
-
-          {hasArabic && ["paragraph", "heading", "quote"].includes(selected.type) ? (
-            <div className="space-y-2 rounded-small border border-black/8 bg-paper-warmth p-3">
-              <p className="text-xs text-graphite">
-                Perbaikan Arab (eksplisit, bisa dibatalkan):
-              </p>
-              <div className="flex flex-wrap gap-2">
-                <button
-                  className="rounded-button bg-sky-tint px-3 py-1.5 text-xs font-medium text-notion-blue hover:opacity-80 disabled:opacity-40"
-                  disabled={acting}
-                  onClick={() =>
-                    void runAction(() => onNormalizeArabic(selected.id))
-                  }
-                  type="button"
-                  title="Lipat presentation forms ke huruf inti; harakat tetap utuh, teks asli disimpan"
-                >
-                  Normalisasi Arab (NFKC)
-                </button>
-                <button
-                  className="rounded-button bg-sky-tint px-3 py-1.5 text-xs font-medium text-notion-blue hover:opacity-80 disabled:opacity-40"
-                  disabled={acting}
-                  onClick={() =>
-                    void runAction(() => onRenderImage(selected.id))
-                  }
-                  type="button"
-                  title="Potong region ini dari halaman sumber menjadi gambar — piksel tidak berubah"
-                >
-                  Render sebagai gambar
-                </button>
-              </div>
-              <p className="text-[11px] text-stone">
-                Normalisasi menjaga teks tetap reflowable dan bisa dicari;
-                render sebagai gambar mempertahankan tampilan persis tetapi
-                teksnya tidak bisa dicari.
-              </p>
-            </div>
-          ) : null}
-
-          {["paragraph", "heading", "quote"].includes(selected.type) ? (
-            <div className="space-y-2">
-              <label className="block text-xs text-stone" htmlFor="block-text">
-                Teks (perubahan ditandai sebagai suntingan pengguna)
-              </label>
-              <textarea
-                className="w-full rounded-button border border-black/15 p-2 text-sm text-ink-black focus:border-notion-blue focus:outline-none"
-                id="block-text"
-                dir={selected.dir ?? undefined}
-                lang={selected.lang ?? undefined}
-                onChange={(event) => setDraftText(event.target.value)}
-                rows={4}
-                value={draftText ?? ""}
-              />
-              <div className="flex gap-2">
-                <input
-                  className="w-24 rounded-button border border-black/15 p-1 text-xs focus:border-notion-blue focus:outline-none"
-                  id="block-lang"
-                  onChange={(event) => setDraftLang(event.target.value)}
-                  placeholder="lang"
-                  value={draftLang ?? ""}
-                />
-                <select
-                  className="rounded-button border border-black/15 p-1 text-xs text-ink-black focus:border-notion-blue focus:outline-none"
-                  onChange={(event) => setDraftDir(event.target.value)}
-                  value={draftDir ?? ""}
-                >
-                  <option value="">arah: (warisi)</option>
-                  <option value="ltr">ltr</option>
-                  <option value="rtl">rtl</option>
-                </select>
-                <button
-                  className="ml-auto rounded-button bg-notion-blue px-3 py-1 text-xs font-medium text-pure-white hover:opacity-90 disabled:opacity-40"
-                  disabled={saving}
-                  onClick={() => void save()}
-                  type="button"
-                >
-                  {saving ? "Menyimpan…" : "Simpan"}
-                </button>
-              </div>
-              {error ? (
-                <p className="rounded-small border-l-2 border-coral pl-2 text-xs text-vermillion">
-                  {error}
-                </p>
               ) : null}
             </div>
-          ) : null}
-        </div>
-      ) : (
-        <p className="p-4 text-graphite">
-          Pilih blok dari pratinjau atau daftar untuk memeriksa detail.
-        </p>
-      )}
-
-      {report?.warnings.length ? (
-        <div className="max-h-44 overflow-y-auto border-t border-black/8 p-4">
-          <h3 className="text-caption font-semibold uppercase tracking-wide text-stone">
-            Peringatan dokumen
-          </h3>
-          <ul className="mt-1.5 space-y-1">
-            {collapseWarnings(report.warnings.map((w) => w.code)).map(
-              (warning) => {
-                const first = report.warnings.find((w) => w.code === warning.code);
-                return (
-                  <li className="flex gap-1.5 text-xs" key={warning.code}>
-                    <span
-                      aria-hidden
-                      className={
-                        "mt-1 h-1.5 w-1.5 shrink-0 rounded-full " +
-                        (first?.severity === "error"
-                          ? "bg-vermillion"
-                          : first?.severity === "warning"
-                            ? "bg-saffron"
-                            : "bg-black/20")
-                      }
-                    />
-                    <span className="text-graphite">
-                      <span className="font-medium text-ink-black/90">
-                        {warning.label}
-                        {warning.count > 1 ? ` ×${warning.count}` : ""}
-                      </span>
-                      {first?.message ? (
-                        <> — {compactMessage(first.message)}</>
-                      ) : null}
-                    </span>
+            <p className="mt-2 text-sm leading-relaxed text-stone">
+              Bahasa: {selected.lang ?? "belum diketahui"} · Arah:{" "}
+              {selected.dir === "rtl" ? "kanan ke kiri" : "kiri ke kanan"}
+            </p>
+            <section aria-label="Perbaikan blok" className="mt-5 border-y border-black/10 py-5">
+              <div className="grid gap-3 min-[440px]:grid-cols-2">
+                <button
+                  type="button"
+                  className="btn-primary whitespace-nowrap"
+                  disabled={locked || dirty || !editable}
+                  onClick={() => void action(() => onRepairText(selected.id), "Perbaikan selesai.")}
+                >
+                  Perbaiki teks
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary whitespace-nowrap"
+                  disabled={locked || dirty || !editable || !selected.page}
+                  onClick={() => void action(() => onRenderImage(selected.id), "Blok dijadikan gambar dari PDF. Gunakan Pulihkan teks awal untuk kembali ke teks.")}
+                >
+                  Jadikan gambar
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary whitespace-nowrap min-[440px]:col-span-2"
+                  disabled={locked || dirty || !report?.restorableBlockIds.includes(selected.id)}
+                  onClick={() => void action(() => onRestoreText(selected.id), "Teks sebelum suntingan pertama dipulihkan.")}
+                >
+                  Pulihkan teks awal
+                </button>
+              </div>
+              <p className="mt-4 text-sm leading-relaxed text-stone">
+                Perbaiki teks menangani bentuk huruf, karakter tak valid, dan arah
+                teks tanpa menebak kata. Gambar mengikuti PDF, tetapi tidak bisa
+                dicari atau mengalir. Teks awal disimpan sebelum perubahan.
+              </p>
+              {!editable ? <p className="mt-2 text-xs text-stone">{selected.nodes.some((node) => node.kind === "image") ? "Paragraf ini memuat gambar Arab dari PDF sumber. Pulihkan teks awal pada catatan induknya sebelum menyunting teks." : "Pilih paragraf, judul, atau kutipan untuk memperbaiki teks atau menjadikannya gambar."}</p> : null}
+              {dirty ? <p className="mt-2 text-xs text-stone">Simpan atau batalkan suntingan sebelum menjalankan perbaikan.</p> : null}
+            </section>
+            {collapseWarnings(selected.warnings).length ? (
+              <ul className="mt-3 space-y-1 text-xs text-graphite">
+                {collapseWarnings(selected.warnings).map((warning) => (
+                  <li key={warning.code}>
+                    • {warning.label}
+                    {warning.needsReview ? " — bandingkan dengan sumber" : ""}
                   </li>
-                );
-              },
+                ))}
+              </ul>
+            ) : null}
+            {editable ? (
+              <BlockEditor
+                key={`${selected.id}:${selected.text}:${selected.lang}:${selected.dir}:${selected.type}:${selected.level}`}
+                block={selected}
+                disabled={locked}
+                onSave={onSave}
+                onDirtyChange={dirtyCallback}
+              />
+            ) : selected.type === "image" ? (
+              <ImageAltEditor
+                key={`${selected.id}:${selected.alt}`}
+                block={selected}
+                disabled={locked}
+                onSave={onSave}
+                onDirtyChange={dirtyCallback}
+              />
+            ) : (
+              <p className="mt-3 text-sm text-graphite">
+                {asImage
+                  ? "Teks disimpan sebagai gambar sumber. Anda dapat mengembalikannya ke teks."
+                  : "Blok ini dapat ditinjau di pratinjau; penyuntingan teks hanya tersedia untuk paragraf, judul, dan kutipan."}
+              </p>
             )}
+            <div className="mt-5 border-t border-black/10 pt-5">
+              <p className="mb-3 text-sm font-medium">Atur urutan baca</p>
+              <div className="grid gap-3">
+                <button
+                  type="button"
+                  className="btn-secondary whitespace-nowrap"
+                  disabled={locked || dirty || selected.canMoveUp === false}
+                  onClick={() =>
+                    void action(
+                      () => onMove(selected.id, "up"),
+                      "Blok dipindahkan satu posisi ke atas.",
+                    )
+                  }
+                >
+                  Pindahkan ke atas
+                </button>
+                <button
+                  type="button"
+                  className="btn-secondary whitespace-nowrap"
+                  disabled={locked || dirty || selected.canMoveDown === false}
+                  onClick={() =>
+                    void action(
+                      () => onMove(selected.id, "down"),
+                      "Blok dipindahkan satu posisi ke bawah.",
+                    )
+                  }
+                >
+                  Pindahkan ke bawah
+                </button>
+              </div>
+              <p className="mt-2 text-xs text-stone">
+                Pemindahan hanya dalam kelompok yang sama. PDF sumber tidak
+                berubah.
+              </p>
+            </div>
+          </>
+        ) : (
+          <p className="text-sm leading-relaxed text-graphite">
+            Klik teks di pratinjau atau pilih blok dari daftar. Halaman sumber
+            akan mengikuti pilihan Anda.
+          </p>
+        )}
+      </div>
+      {report?.warnings.length ? (
+        <details className="border-t border-black/10 p-5 sm:p-6">
+          <summary className="cursor-pointer text-sm font-medium">
+            Catatan dokumen ({report.warnings.length})
+          </summary>
+          <ul className="mt-2 max-h-32 space-y-2 overflow-y-auto text-xs text-graphite">
+            {collapseWarnings(
+              report.warnings.map((warning) => warning.code),
+            ).map((warning) => (
+              <li key={warning.code}>
+                <strong>
+                  {warning.label}
+                  {warning.count > 1 ? ` ×${warning.count}` : ""}
+                </strong>{" "}
+                —{" "}
+                {compactMessage(
+                  report.warnings.find((item) => item.code === warning.code)
+                    ?.message ?? "",
+                )}
+              </li>
+            ))}
           </ul>
-        </div>
+        </details>
       ) : null}
     </div>
   );

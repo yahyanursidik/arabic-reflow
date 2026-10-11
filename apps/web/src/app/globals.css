@@ -12,7 +12,7 @@
   --color-pure-white: #ffffff;
   --color-ink-black: #000000;
   --color-charcoal: #111111;
-  --color-stone: #757575;
+  --color-stone: #68635f;
   --color-graphite: #615d59;
   --color-slate: #696969;
   --color-sky-tint: #e6f3fe;
@@ -27,11 +27,13 @@
   --color-peach: #f6d5b8;
 
   /* Typography */
-  --font-notioninter: var(--font-inter), ui-sans-serif, system-ui, -apple-system,
-    "Segoe UI", Roboto, sans-serif;
+  --font-notioninter:
+    var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, sans-serif;
   --font-lyon-text: var(--font-lyon), Georgia, "Times New Roman", serif;
-  --font-sans: var(--font-inter), ui-sans-serif, system-ui, -apple-system,
-    "Segoe UI", Roboto, sans-serif;
+  --font-sans:
+    var(--font-inter), ui-sans-serif, system-ui, -apple-system, "Segoe UI",
+    Roboto, sans-serif;
 
   /* Type scale (with per-size leading/tracking) */
   --text-caption: 12px;
@@ -72,25 +74,189 @@ body {
   @apply bg-paper-warmth font-notioninter text-ink-black antialiased;
 }
 
-/* Reflow preview: editorial serif reading surface (Lyon role), RTL larger. */
+/* Match the EPUB's paragraph rhythm; UI annotations have their own styles. */
+@font-face {
+  font-family: "FiraGO";
+  src: url("/fonts/FiraGO-Regular.ttf") format("truetype");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
 .reflow-preview {
   font-family: var(--font-lyon-text);
+  line-height: 1.7;
+  overflow-wrap: break-word;
 }
-
-.reflow-preview [dir="rtl"] {
-  font-size: 1.25em;
+.reflow-preview > .preview-block {
+  max-width: 38em;
+  margin-inline: auto;
+}
+.reflow-preview p {
+  margin: 0 0 0.85em;
+  text-align: start;
+  text-indent: 0;
+  word-spacing: normal;
+  white-space: pre-line;
+  hyphens: none;
+}
+.reflow-preview :is(h1, h2, h3, h4, h5, h6) {
+  font-family: var(--font-sans);
+  font-weight: 600;
+  line-height: 1.35;
+  margin: 1.4em 0 0.65em;
+}
+.reflow-preview h1 { font-size: 1.65em; }
+.reflow-preview h2 { font-size: 1.35em; }
+.reflow-preview h3 { font-size: 1.3em; }
+.reflow-preview h4 { font-size: 1.15em; }
+.reflow-preview h5 { font-size: 1.05em; }
+.reflow-preview h6 { font-size: 0.95em; }
+.reflow-preview :is(p, blockquote)[dir="rtl"], .reflow-preview bdi[lang="ar"] {
+  font-size: 1.15em;
   line-height: 1.9;
 }
-
+.reflow-preview [lang="ar"] {
+  font-family: "FiraGO", "Arabic Typesetting", serif;
+  letter-spacing: normal;
+  word-break: normal;
+}
+.reflow-preview :is(p, blockquote)[dir="rtl"] { text-align: right; }
+.reflow-preview [lang="ar"] [lang="ar"], .reflow-preview [dir="rtl"] bdi {
+  font-size: inherit;
+}
 .reflow-preview blockquote {
-  margin: 0.75em 1.5em;
+  margin: 1em 0.65em;
+  padding-inline-start: 0.65em;
+  border-inline-start: 2px solid #b18164;
+  white-space: pre-line;
 }
-
 .reflow-preview figure {
-  margin: 0.75em 0;
+  margin: 1.2em 0;
 }
-
 .reflow-preview img {
   max-width: 100%;
   height: auto;
+}
+.reflow-preview .reading-footnote {
+  font-size: 0.95em;
+  line-height: 1.7;
+  margin: 1.4em 0;
+  padding: 0.85em 0.65em;
+  border-top: 1px solid rgb(0 0 0 / 12%);
+  background: var(--color-paper-warmth);
+}
+.reflow-preview .footnote-label {
+  font-family: var(--font-sans);
+  font-size: 1em;
+  font-weight: 600;
+  margin: 0 0 0.65em;
+}
+.reflow-preview .preview-status {
+  margin: 0.5em 0 1em;
+  white-space: normal;
+}
+
+@layer components {
+  .panel {
+    @apply rounded-card border border-black/10 bg-pure-white p-5 sm:p-6;
+  }
+  .btn-primary {
+    @apply inline-flex min-h-11 items-center justify-center rounded-button bg-notion-blue px-4 py-2 text-sm font-medium text-white hover:bg-[#0064bd] disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .btn-secondary {
+    @apply inline-flex min-h-11 items-center justify-center rounded-button border border-black/15 bg-white px-4 py-2 text-sm font-medium text-graphite hover:bg-paper-warmth disabled:cursor-not-allowed disabled:opacity-50;
+  }
+  .field {
+    @apply min-h-11 w-full rounded-button border border-black/20 bg-white px-3 py-2 text-sm text-charcoal disabled:bg-paper-warmth;
+  }
+}
+
+button,
+a,
+input,
+select,
+textarea {
+  touch-action: manipulation;
+}
+:where(button, a, input, select, textarea, [tabindex]):focus-visible {
+  outline: 2px solid #0075de;
+  outline-offset: 3px;
+}
+button:not(:disabled) {
+  cursor: pointer;
+}
+.skip-link {
+  position: absolute;
+  top: -100px;
+  left: 16px;
+  z-index: 100;
+  padding: 12px;
+  background: white;
+}
+.skip-link:focus {
+  top: 8px;
+}
+.reflow-preview table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 0.9em;
+}
+.reflow-preview td {
+  border: 1px solid #ddd;
+  padding: 0.5em;
+  overflow-wrap: anywhere;
+}
+
+/* Keep the editor readable without a second, compressed scrolling area. */
+.block-inspector :is(.btn-primary, .btn-secondary, .field) {
+  min-height: 3rem;
+  font-size: 1rem;
+}
+.block-inspector textarea.field {
+  min-height: 12rem;
+}
+
+.reading-controls :is(.btn-primary, .btn-secondary, .field) {
+  min-height: 3rem;
+  font-size: 1rem;
+}
+.reflow-preview .inline-source-image {
+  display: inline-block;
+  height: 1.5em;
+  width: auto;
+  max-width: 100%;
+  object-fit: contain;
+  vertical-align: -0.35em;
+}
+.image-viewer::backdrop {
+  background: rgb(17 17 17 / 65%);
+}
+
+.brand { display: inline-flex; align-items: center; gap: 0.5rem; }
+.brand-symbol { position: relative; display: block; overflow: hidden; width: 3.25rem; height: 3.25rem; flex-shrink: 0; }
+.brand-symbol img { position: absolute; width: 4.0625rem; height: 4.0625rem; max-width: none; left: -0.455rem; top: -0.1rem; clip-path: inset(0 0 25% 0); }
+.brand-name { color: #062449; font-size: 1.125rem; font-weight: 700; letter-spacing: -0.035em; }
+.brand-name > span { color: #0075de; }
+.brand-compact .brand-symbol { width: 2rem; height: 2rem; }
+.brand-compact .brand-symbol img { width: 2.5rem; height: 2.5rem; left: -0.28rem; top: -0.06rem; }
+.brand-compact .brand-name { font-size: 1rem; }
+.reflow-preview .source-arabic-image { width: 100%; max-height: none; height: auto; }
+
+.export-panel :is(.btn-primary, .btn-secondary, .field) {
+  min-height: 3rem;
+  font-size: 1rem;
+}
+.export-panel .export-download {
+  min-height: 3.5rem;
+  font-weight: 600;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *,
+  *::before,
+  *::after {
+    scroll-behavior: auto !important;
+    transition: none !important;
+    animation: none !important;
+  }
 }

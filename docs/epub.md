@@ -39,6 +39,37 @@ redistributable open font) is embedded under `fonts/` and referenced via
 
 ## Validation (M4-05)
 
+### Phone layout and source images
+
+Small screens use start-aligned paragraphs, readable footnotes, narrower margins,
+and proportional source images. Image inspection links open XHTML pages in the
+EPUB, with a fit-to-screen image, an optional original-size view, and a return link.
+Inspection pages do not enter the linear reading order. Resource bytes are preserved.
+
+Paragraphs use a consistent gap with no first-line indent or stretched justification.
+Explicit source newlines remain visible (credits, contents, verse), and long lines
+are bounded to 38 em on large screens. Latin text uses Source Serif 4 when available,
+then Georgia/Times/reader serif; Arabic uses embedded FiraGO, including inline spans,
+with larger type and room for harakat. Nested RTL spans inherit the block size rather
+than scaling repeatedly. Reader colors are inherited to support light/dark themes.
+Each footnote has a visible marker label; verified links retain their return targets.
+The web preview bundles the same FiraGO under its SIL OFL license and uses the same
+paragraph rhythm. Review annotations can be shown separately from the reading flow.
+
+Verified source-image blocks occupy the full reading width, with proportional height
+and no viewport-height cap. The separate, non-linear inspection page opens at 200%
+inside a scrollable region (RTL starts on the right), with a fit-width image and
+return link. Every view references the same unchanged resource bytes: no cropping,
+resampling or reconstructed Arabic. Readers without overflow support can use the
+complete fit-width view and their native zoom. App artwork is never added to book content.
+
+Only explicitly verified `footnote_refs` create superscript links. Referenced notes
+move to a chapter-end section with return links and navigation entries; unreferenced
+or ambiguous markers retain their original placement. `inline_image` paragraph nodes
+carry source word pixels alongside reflowable text. Text edits cannot silently flatten
+these nodes. `decorative` images can be omitted from the reading flow while retaining
+their original resources and source provenance.
+
 `engine/validation/epub.py` checks: mimetype first and stored uncompressed,
 `META-INF/container.xml` parseable, OPF manifest/spine consistency, and
 well-formed XHTML with `lang` on the root. Severe problems raise

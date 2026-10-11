@@ -8,16 +8,20 @@ rejection, size limits, and no logging of document contents.
 
 from __future__ import annotations
 
+import os
+import subprocess
 import threading
+from functools import wraps
 from pathlib import Path
+from typing import Literal
 
 import pymupdf
 from fastapi import FastAPI, File, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
-from apps.api.jobs import JobStore
+from apps.api.jobs import ConversionInProgress, JobStore
 from apps.api.services import run_conversion
 from apps.api.storage import DocumentStore
 
@@ -30,10 +34,12 @@ class ConvertRequest(BaseModel):
         default=False,
         description="Run the OCR stage for scanned pages (requires an OCR extra)",
     )
-    engine: str | None = Field(
+    engine: Literal["paddle", "tesseract"] | None = Field(
         default=None,
         description="OCR engine name (paddle | tesseract); default: first available",
     )
+    mode: Literal["native", "auto", "force"] | None = None
+    languages: list[Literal["ar", "id", "en"]] = Field(default_factory=lambda: ["ar", "id", "en"], min_length=1, max_length=3)
 
 
 class BlockUpdate(BaseModel):
@@ -44,6 +50,21 @@ class BlockUpdate(BaseModel):
         default=None, pattern=r"^(?:[a-z]{2,3}(?:-[A-Za-z0-9]+)*|unknown)$"
     )
     dir: str | None = Field(default=None, pattern=r"^(ltr|rtl)$")
+    type: Literal["paragraph", "heading", "quote"] | None = None
+    level: int | None = Field(default=None, ge=1, le=6)
+    alt: str | None = Field(default=None, max_length=2000)
+
+
+class BlockMove(BaseModel):
+    direction: Literal["up", "down"]
+
+
+class RepairRequest(BaseModel):
+    block_ids: list[str] = Field(min_length=1, max_length=5000)
+
+
+class RenderImageRequest(BaseModel):
+    block_ids: list[str] = Field(min_length=1, max_length=500)
 
 
 class MetadataUpdate(BaseModel):
@@ -52,6 +73,13 @@ class MetadataUpdate(BaseModel):
     title: str | None = Field(default=None, min_length=1, max_length=500)
     author: list[str] | None = Field(default=None, max_length=10)
 
+    @field_validator("title")
+    @classmethod
+    def nonblank_title(cls, value):
+        if value is not None and not value.strip():
+            raise ValueError("title cannot be blank")
+        return value
+
 
 COVER_RESOURCE_ID = "cover"
 
@@ -59,27 +87,38 @@ COVER_RESOURCE_ID = "cover"
 def create_app(storage_dir: Path | None = None) -> FastAPI:
     storage = DocumentStore(
         storage_dir
-        or Path(__import__("os").environ.get("REFLOW_STORAGE_DIR", "/tmp/reflow"))
+        or Path(os.environ.get("REFLOW_STORAGE_DIR", "/tmp/reflow"))
     )
     jobs = JobStore(storage)
 
     app = FastAPI(
         title="Reflow API",
-        version="0.7.2",
+        version="0.8.0",
         description="Mixed Arabic-Latin PDF to reflowable EPUB 3 conversion.",
     )
     app.add_middleware(
         CORSMiddleware,
-        allow_origins=[
-            "http://localhost:3000",
-            "http://127.0.0.1:3000",
-            "http://[::1]:3000",
-        ],
+        allow_origins=[origin.strip() for origin in os.environ.get(
+            "REFLOW_CORS_ORIGINS", "http://localhost:3000,http://127.0.0.1:3000,http://[::1]:3000"
+        ).split(",") if origin.strip()],
         allow_methods=["*"],
         allow_headers=["*"],
+        expose_headers=["Content-Disposition"],
     )
     app.state.storage = storage
     app.state.jobs = jobs
+
+    def editable(function):
+        """Serialize edits and reject them during a running conversion."""
+        @wraps(function)
+        def guarded(document_id: str, *args, **kwargs):
+            _require_document(document_id)
+            with storage.lock(document_id):
+                job = jobs.get_for_document(document_id)
+                if job and job.status in ("queued", "processing"):
+                    raise HTTPException(409, "conversion in progress; wait before editing or exporting")
+                return function(document_id, *args, **kwargs)
+        return guarded
 
     # ---- health ----------------------------------------------------------------
 
@@ -87,11 +126,18 @@ def create_app(storage_dir: Path | None = None) -> FastAPI:
     def health() -> dict[str, str]:
         return {"status": "ok"}
 
+    @app.get("/api/v1/capabilities")
+    def get_capabilities() -> dict:
+        from engine.ocr.runtime import ocr_capabilities
+        from engine.validation.epubcheck import epubcheck_available
+
+        return {"ocr": ocr_capabilities(), "max_upload_bytes": MAX_UPLOAD_BYTES, "validation": {"internal": True, "epubcheck": epubcheck_available()}}
+
     # ---- documents (M7-01, M7-02) ------------------------------------------------
 
     @app.post("/api/v1/documents", status_code=201)
     async def upload_document(file: UploadFile = File(...)) -> dict:
-        content = await file.read()
+        content = await file.read(MAX_UPLOAD_BYTES + 1)
         if len(content) > MAX_UPLOAD_BYTES:
             raise HTTPException(status_code=413, detail="file exceeds the 100 MB limit")
         if not content.startswith(PDF_MAGIC):
@@ -172,7 +218,11 @@ def create_app(storage_dir: Path | None = None) -> FastAPI:
     @app.post("/api/v1/documents/{document_id}/convert", status_code=202)
     def convert_document(document_id: str, request: ConvertRequest) -> dict:
         _require_document(document_id)
-        job = jobs.create(document_id)
+        with storage.lock(document_id):
+            try:
+                job = jobs.create(document_id)
+            except ConversionInProgress:
+                raise HTTPException(409, "a conversion is already running for this document")
         worker = threading.Thread(
             target=run_conversion,
             kwargs={
@@ -182,11 +232,17 @@ def create_app(storage_dir: Path | None = None) -> FastAPI:
                 "document_id": document_id,
                 "ocr": request.ocr,
                 "ocr_engine_name": request.engine,
+                "ocr_mode": request.mode,
+                "ocr_languages": request.languages,
             },
             daemon=True,
             name=f"convert-{document_id}",
         )
-        worker.start()
+        try:
+            worker.start()
+        except RuntimeError:
+            jobs.update(job.id, status="failed", stage="failed", error="Could not start conversion worker")
+            raise HTTPException(503, "could not start conversion; please retry")
         return {"job_id": job.id, "status": job.status, "stage": job.stage}
 
     @app.get("/api/v1/jobs/{job_id}")
@@ -211,16 +267,27 @@ def create_app(storage_dir: Path | None = None) -> FastAPI:
     @app.get("/api/v1/documents/{document_id}/report")
     def get_report(document_id: str) -> dict:
         _require_document(document_id)
-        report = storage.read_report(document_id)
-        if report is None:
+        reflow = storage.read_reflow(document_id)
+        profile = storage.read_profile(document_id)
+        if reflow is None or profile is None:
             raise HTTPException(
                 status_code=404, detail="document has not been converted yet"
             )
+        from apps.api.services import build_report
+        from engine.analyzer.models import DocumentProfile
+        from engine.reflowdoc.models import ReflowDocument
+
+        report = build_report(DocumentProfile.model_validate(profile), ReflowDocument.model_validate(reflow))
+        report["review"] = {"restorable_block_ids": list(storage.read_originals(document_id))}
+        saved = storage.read_report(document_id) or {}
+        if "ocr" in saved:
+            report["ocr"] = saved["ocr"]
         return report
 
     # ---- book metadata and cover (PRD 7 Should-Have) ------------------------------
 
     @app.patch("/api/v1/documents/{document_id}/metadata")
+    @editable
     def update_metadata(document_id: str, update: MetadataUpdate) -> dict:
         """Edit book title/author (Should-Have: metadata editor)."""
         _require_document(document_id)
@@ -244,6 +311,7 @@ def create_app(storage_dir: Path | None = None) -> FastAPI:
         }
 
     @app.post("/api/v1/documents/{document_id}/cover")
+    @editable
     def set_cover(document_id: str, page: int) -> dict:
         """Choose a source page as the EPUB cover (Should-Have: cover selection)."""
         _require_document(document_id)
@@ -288,6 +356,7 @@ def create_app(storage_dir: Path | None = None) -> FastAPI:
         return {"cover_resource_id": COVER_RESOURCE_ID, "source_page": page}
 
     @app.delete("/api/v1/documents/{document_id}/cover")
+    @editable
     def clear_cover(document_id: str) -> dict:
         _require_document(document_id)
         reflow = storage.read_reflow(document_id)
@@ -306,7 +375,8 @@ def create_app(storage_dir: Path | None = None) -> FastAPI:
         return {"cover_resource_id": None}
 
     @app.post("/api/v1/documents/{document_id}/export/epub")
-    def export_epub(document_id: str) -> FileResponse:
+    @editable
+    def export_epub(document_id: str, validation: Literal["internal", "w3c"] = "internal") -> FileResponse:
         _require_document(document_id)
         reflow = storage.read_reflow(document_id)
         if reflow is None:
@@ -319,8 +389,24 @@ def create_app(storage_dir: Path | None = None) -> FastAPI:
         from engine.reflowdoc.models import ReflowDocument
         from engine.validation.epub import assert_valid
 
-        data = render_epub(ReflowDocument.model_validate(reflow))
+        from engine.validation.reflow import quality_report
+
+        document = ReflowDocument.model_validate(reflow)
+        if not quality_report(document)["can_export"]:
+            raise HTTPException(422, "document references are incomplete; inspect the quality report before exporting")
+        data = render_epub(document)
         assert_valid(data)
+        if validation == "w3c":
+            from engine.validation.epubcheck import epubcheck_available, run_epubcheck
+
+            if not epubcheck_available():
+                raise HTTPException(503, "EPUBCheck W3C is not ready; install Java and configure EPUBCHECK_JAR")
+            try:
+                checked = run_epubcheck(data)
+            except (OSError, RuntimeError, subprocess.SubprocessError):
+                raise HTTPException(503, "EPUBCheck could not finish; check the local validator setup")
+            if not checked.passed:
+                raise HTTPException(422, "EPUBCheck W3C rejected the package: " + " | ".join(checked.messages[:8]))
         storage.write_epub(document_id, data)
         path = storage.epub_path(document_id)
         meta = storage.get_meta(document_id) or {}
@@ -334,6 +420,7 @@ def create_app(storage_dir: Path | None = None) -> FastAPI:
     # ---- review (M7-06 + per-block Arabic repair) --------------------------------
 
     @app.patch("/api/v1/documents/{document_id}/blocks/{block_id}")
+    @editable
     def update_block(document_id: str, block_id: str, update: BlockUpdate) -> dict:
         _require_document(document_id)
         reflow = storage.read_reflow(document_id)
@@ -341,41 +428,58 @@ def create_app(storage_dir: Path | None = None) -> FastAPI:
             raise HTTPException(
                 status_code=404, detail="document has not been converted yet"
             )
-        from engine.reflowdoc.models import (
-            Direction,
-            HeadingBlock,
-            ParagraphBlock,
-            QuoteBlock,
-            ReflowDocument,
-            TextNode,
-        )
+        from engine.reflowdoc.models import ReflowDocument
+        from engine.reflowdoc.editing import update_semantic_block
+        from engine.reflowdoc.traversal import block_locations
 
         document = ReflowDocument.model_validate(reflow)
         block = _find_block(document, block_id)
         if block is None:
             raise HTTPException(status_code=404, detail="block not found")
 
-        if update.text is not None:
-            if isinstance(block, ParagraphBlock):
-                block.content = [TextNode(text=update.text)]
-            elif isinstance(block, (HeadingBlock, QuoteBlock)):
-                block.text = update.text
-            else:
-                raise HTTPException(
-                    status_code=422,
-                    detail=f"block type {block.type} does not support text edits",
-                )
-        if update.lang is not None:
-            block.lang = update.lang
-        if update.dir is not None:
-            block.dir = Direction(update.dir)
-        block.modified_by_user = True
+        values = update.model_dump(exclude_none=True)
+        if not values:
+            return block.model_dump()
+        try:
+            changed = update_semantic_block(block, **values)
+        except ValueError as exc:
+            raise HTTPException(422, str(exc))
+        if storage.read_original_block(document_id, block_id) is None:
+            storage.write_original_block(
+                document_id, block_id, {"block": block.model_dump(mode="json")}
+            )
+        for blocks, index in block_locations(document):
+            if blocks[index].id == block_id:
+                blocks[index] = changed
+                break
+        from engine.arabic.report import attach_integrity
 
+        document = attach_integrity(document)
+        storage.write_reflow(document_id, document)
+        return changed.model_dump()
+
+    @app.post("/api/v1/documents/{document_id}/blocks/{block_id}/move")
+    @editable
+    def move_document_block(document_id: str, block_id: str, update: BlockMove) -> dict:
+        from engine.reflowdoc.editing import move_block
+        from engine.reflowdoc.models import ReflowDocument
+
+        reflow = storage.read_reflow(document_id)
+        if reflow is None:
+            raise HTTPException(404, "document has not been converted yet")
+        document = ReflowDocument.model_validate(reflow)
+        try:
+            block = move_block(document, block_id, update.direction)
+        except KeyError:
+            raise HTTPException(404, "block not found")
+        except ValueError as exc:
+            raise HTTPException(422, str(exc))
         storage.write_reflow(document_id, document)
         return block.model_dump()
 
     @app.post("/api/v1/documents/{document_id}/blocks/{block_id}/render-image")
-    def render_block_image(document_id: str, block_id: str) -> dict:
+    @editable
+    def render_block_image(document_id: str, block_id: str, update: RenderImageRequest | None = None) -> dict:
         """Swap an Arabic text block for a pixel-perfect crop of the source
         page (explicit user repair, reversible via restore-text)."""
         _require_document(document_id)
@@ -387,7 +491,8 @@ def create_app(storage_dir: Path | None = None) -> FastAPI:
 
         try:
             image_block = block_actions.render_block_as_image(
-                storage, document_id, block_id
+                storage, document_id, block_id,
+                block_ids=update.block_ids if update else None,
             )
         except block_actions.BlockNotFound:
             raise HTTPException(status_code=404, detail="block not found")
@@ -396,6 +501,7 @@ def create_app(storage_dir: Path | None = None) -> FastAPI:
         return image_block.model_dump()
 
     @app.post("/api/v1/documents/{document_id}/blocks/{block_id}/restore-text")
+    @editable
     def restore_block_text(document_id: str, block_id: str) -> dict:
         _require_document(document_id)
         from apps.api import blocks as block_actions
@@ -408,9 +514,12 @@ def create_app(storage_dir: Path | None = None) -> FastAPI:
             raise HTTPException(
                 status_code=404, detail="no pre-render original stored for this block"
             )
+        except ValueError as exc:
+            raise HTTPException(status_code=422, detail=str(exc))
         return restored.model_dump()
 
     @app.post("/api/v1/documents/{document_id}/blocks/{block_id}/normalize-arabic")
+    @editable
     def normalize_block_arabic(document_id: str, block_id: str) -> dict:
         """NFKC-fold presentation forms to core letters; harakat preserved,
         original kept in source_text (explicit user action)."""
@@ -427,6 +536,30 @@ def create_app(storage_dir: Path | None = None) -> FastAPI:
             raise HTTPException(status_code=422, detail=str(exc))
         return normalized.model_dump()
 
+    @app.post("/api/v1/documents/{document_id}/blocks/{block_id}/repair-text")
+    @editable
+    def repair_block_text(document_id: str, block_id: str) -> dict:
+        from apps.api import blocks as block_actions
+
+        if storage.read_reflow(document_id) is None:
+            raise HTTPException(404, "document has not been converted yet")
+        try:
+            return block_actions.repair_blocks(storage, document_id, [block_id])
+        except block_actions.BlockNotFound:
+            raise HTTPException(404, "block not found")
+
+    @app.post("/api/v1/documents/{document_id}/repair-text")
+    @editable
+    def repair_problem_blocks(document_id: str, request: RepairRequest) -> dict:
+        from apps.api import blocks as block_actions
+
+        if storage.read_reflow(document_id) is None:
+            raise HTTPException(404, "document has not been converted yet")
+        try:
+            return block_actions.repair_blocks(storage, document_id, request.block_ids, skip_edited=True)
+        except block_actions.BlockNotFound:
+            raise HTTPException(404, "block not found")
+
     # ---- helpers -------------------------------------------------------------------------
 
     def _require_document(document_id: str) -> None:
@@ -434,15 +567,9 @@ def create_app(storage_dir: Path | None = None) -> FastAPI:
             raise HTTPException(status_code=404, detail="document not found")
 
     def _find_block(document, block_id: str):
-        for chapter in document.chapters:
-            for block in chapter.blocks:
-                if block.id == block_id:
-                    return block
-                if hasattr(block, "blocks"):
-                    for inner in block.blocks:
-                        if inner.id == block_id:
-                            return inner
-        return None
+        from apps.api.blocks import find_block
+
+        return find_block(document, block_id)
 
     return app
 

@@ -20,7 +20,11 @@ export function AnalysisSummary({ profile }: { profile: Profile }) {
         <div>
           <dt className="text-stone">Klasifikasi</dt>
           <dd className="font-medium text-ink-black">
-            {profile.classification}
+            {{
+              native: "PDF teks",
+              scanned: "PDF pindai",
+              hybrid: "PDF campuran",
+            }[profile.classification] ?? profile.classification}
             <span className="ml-1 font-normal text-stone">
               ({Math.round(profile.classificationConfidence * 100)}%)
             </span>
@@ -28,11 +32,15 @@ export function AnalysisSummary({ profile }: { profile: Profile }) {
         </div>
         <div>
           <dt className="text-stone">Lapisan teks</dt>
-          <dd className="font-medium text-ink-black">{yesNo(profile.textLayer)}</dd>
+          <dd className="font-medium text-ink-black">
+            {yesNo(profile.textLayer)}
+          </dd>
         </div>
         <div>
           <dt className="text-stone">Terdeteksi Arab</dt>
-          <dd className="font-medium text-ink-black">{yesNo(profile.arabicDetected)}</dd>
+          <dd className="font-medium text-ink-black">
+            {yesNo(profile.arabicDetected)}
+          </dd>
         </div>
       </dl>
       <ul className="mt-4 space-y-1 text-xs text-graphite">
@@ -44,8 +52,8 @@ export function AnalysisSummary({ profile }: { profile: Profile }) {
         ) : null}
         {profile.likelyMulticolumnPages.length > 0 ? (
           <li>
-            Kemungkinan multi-kolom: {profile.likelyMulticolumnPages.join(", ")} —
-            urutan baca periksa saat review.
+            Kemungkinan multi-kolom: {profile.likelyMulticolumnPages.join(", ")}{" "}
+            — urutan baca periksa saat review.
           </li>
         ) : null}
         {!profile.textLayer && profile.scannedPages.length === 0 ? (

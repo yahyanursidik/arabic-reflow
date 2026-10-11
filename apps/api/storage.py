@@ -17,8 +17,10 @@ from __future__ import annotations
 
 import base64
 import json
+import os
 import re
-import shutil
+import threading
+import time
 import uuid
 from datetime import datetime, timezone
 from pathlib import Path
@@ -55,11 +57,19 @@ class DocumentStore:
         self.root = Path(root)
         self.documents_dir = self.root / "documents"
         self.documents_dir.mkdir(parents=True, exist_ok=True)
+        self._locks: dict[str, threading.RLock] = {}
+        self._locks_guard = threading.Lock()
+
+    def lock(self, document_id: str):
+        with self._locks_guard:
+            return self._locks.setdefault(document_id, threading.RLock())
 
     def doc_dir(self, document_id: str) -> Path:
-        return self.documents_dir / document_id
+        return self._doc_dir(document_id)
 
     def _doc_dir(self, document_id: str) -> Path:
+        if not re.fullmatch(r"[a-f0-9]{32}", document_id):
+            raise ValueError("invalid document id")
         return self.documents_dir / document_id
 
     def create_document(self, filename: str, content: bytes) -> dict:
@@ -79,6 +89,8 @@ class DocumentStore:
         return meta
 
     def exists(self, document_id: str) -> bool:
+        if not re.fullmatch(r"[a-f0-9]{32}", document_id):
+            return False
         return self._doc_dir(document_id).is_dir()
 
     def get_meta(self, document_id: str) -> dict | None:
@@ -96,10 +108,24 @@ class DocumentStore:
             # resources survive persistence.
             payload = payload.model_dump(mode="json")
         target = self._doc_dir(document_id) / name
-        target.write_text(
-            json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default),
-            "utf-8",
-        )
+        temporary = target.with_name(f".{target.name}.{uuid.uuid4().hex}.tmp")
+        try:
+            temporary.write_text(
+                json.dumps(payload, ensure_ascii=False, indent=2, default=_json_default),
+                "utf-8",
+            )
+            for attempt in range(5):
+                try:
+                    os.replace(temporary, target)
+                    break
+                except PermissionError:
+                    # Windows readers/antivirus can briefly deny replacement.
+                    # Keep the previous valid JSON and retry the atomic swap.
+                    if os.name != "nt" or attempt == 4:
+                        raise
+                    time.sleep(0.05 * (2 ** attempt))
+        finally:
+            temporary.unlink(missing_ok=True)
 
     def _read_json(self, document_id: str, name: str):
         path = self._doc_dir(document_id) / name
@@ -146,9 +172,7 @@ class DocumentStore:
     def write_original_block(self, document_id: str, block_id: str, record: dict) -> None:
         originals = self.read_originals(document_id)
         originals[block_id] = record
-        self._originals_path(document_id).write_text(
-            json.dumps(originals, ensure_ascii=False, indent=2), "utf-8"
-        )
+        self._write_json(document_id, "originals.json", originals)
 
     def read_originals(self, document_id: str) -> dict:
         return self._read_json(document_id, "originals.json") or {}
@@ -159,6 +183,4 @@ class DocumentStore:
     def delete_original_block(self, document_id: str, block_id: str) -> None:
         originals = self.read_originals(document_id)
         originals.pop(block_id, None)
-        self._originals_path(document_id).write_text(
-            json.dumps(originals, ensure_ascii=False, indent=2), "utf-8"
-        )
+        self._write_json(document_id, "originals.json", originals)

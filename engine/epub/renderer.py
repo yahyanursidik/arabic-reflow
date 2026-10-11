@@ -10,8 +10,9 @@ The renderer never mutates its input document (REFLOWDOC-SPEC section 18).
 
 from __future__ import annotations
 
-import tempfile
-from pathlib import Path
+import io
+from contextlib import suppress
+from urllib.parse import quote
 
 from ebooklib import epub
 
@@ -21,8 +22,11 @@ from engine.epub.css import (
     FONT_ID,
     STYLESHEET,
 )
-from engine.epub.xhtml import chapter_xhtml, primary_language
-from engine.reflowdoc.models import ReflowDocument
+from engine.epub.xhtml import chapter_xhtml, primary_language, image_view_filename, image_view_xhtml
+from engine.epub.footnotes import FootnoteContext
+from engine.epub.xml import xml_text
+from engine.reflowdoc.models import HeadingBlock, ImageBlock, ReflowDocument
+from engine.reflowdoc.traversal import iter_blocks
 
 _CSS_FONT_URL = "fonts/FiraGO-Regular.ttf"
 
@@ -40,15 +44,11 @@ def _font_naming(data: bytes) -> tuple[str, str]:
 
 
 def _document_has_arabic(document: ReflowDocument) -> bool:
-    for chapter in document.chapters:
-        for block in chapter.blocks:
-            text = getattr(block, "text", None)
-            if isinstance(text, str) and any(is_arabic_letter(ch) for ch in text):
-                return True
-            content = getattr(block, "content", None)
-            for node in content or []:
-                if any(is_arabic_letter(ch) for ch in node.text):
-                    return True
+    for block in iter_blocks(document):
+        texts = [getattr(block, "text", "")]
+        texts.extend(cell.text for row in getattr(block, "rows", []) for cell in row)
+        if any(any(is_arabic_letter(ch) for ch in text) for text in texts if isinstance(text, str)):
+            return True
     return False
 
 
@@ -84,12 +84,12 @@ def render_epub(
     """
     book = epub.EpubBook()
     book.set_identifier(document.document_id)
-    title = document.metadata.title or document.metadata.source_filename or "Untitled"
+    title = xml_text(document.metadata.title or document.metadata.source_filename or "Untitled") or "Untitled"
     book.set_title(title)
     # Unique dc:creator ids: ebooklib's add_author stamps every creator with
     # id="creator", which epubcheck rejects as a duplicate id (RSC-005).
     for index, author in enumerate(document.metadata.author or ["Unknown"], start=1):
-        book.add_metadata("DC", "creator", author, {"id": f"creator-{index}"})
+        book.add_metadata("DC", "creator", xml_text(author), {"id": f"creator-{index}"})
 
     language = primary_language(document)
     book.set_language(language)
@@ -150,11 +150,13 @@ def render_epub(
             )
 
     chapters = []
+    image_views = []
+    navigation = []
     for index, chapter in enumerate(document.chapters, start=1):
         file_name = f"chapter-{index:03d}.xhtml"
         content = chapter_xhtml(document, chapter)
         item = epub.EpubHtml(
-            title=chapter.title or title,
+            title=xml_text(chapter.title or title) or title,
             file_name=file_name,
             lang=language,
             content=content.encode("utf-8"),
@@ -162,8 +164,53 @@ def render_epub(
         item.add_item(stylesheet)
         book.add_item(item)
         chapters.append(item)
+        # Source-image inspection pages stay outside the linear reading order.
+        for block in iter_blocks(ReflowDocument(chapters=[chapter])):
+            resource_id = getattr(block, "source_image_resource_id", None)
+            if isinstance(block, ImageBlock) and not block.decorative and "ARABIC_RENDERED_AS_IMAGE" in block.warnings:
+                resource_id = block.resource_id
+            if not resource_id:
+                continue
+            view = epub.EpubHtml(
+                uid="view-" + image_view_filename(block.id).removesuffix(".xhtml"),
+                title="Gambar sumber", file_name=image_view_filename(block.id), lang=language,
+                content=image_view_xhtml(document, resource_id,
+                    f"{file_name}#{quote(block.id, safe='-._~')}", getattr(block, "alt", None) or "Gambar dari PDF sumber",
+                    rtl=block.lang == "ar" or block.dir == "rtl").encode("utf-8"),
+            )
+            view.add_item(stylesheet)
+            book.add_item(view)
+            image_views.append((view, "no"))
+        nodes = []
+        stack = []
+        for block in chapter.blocks:
+            if isinstance(block, HeadingBlock):
+                label, level = xml_text(block.text), block.level
+            elif isinstance(block, ImageBlock) and block.heading_level is not None:
+                label, level = xml_text(block.alt or ""), block.heading_level
+            else:
+                continue
+            if not label.strip():
+                continue
+            while stack and stack[-1][0] >= level:
+                stack.pop()
+            children = []
+            entry = (epub.Link(f"{file_name}#{quote(block.id, safe='-._~')}", label, block.id), children)
+            (stack[-1][1] if stack else nodes).append(entry)
+            stack.append((level, children))
 
-    book.toc = chapters
+        def finalize(entries):
+            return [(link, finalize(children)) if children else link for link, children in entries]
+
+        notes = FootnoteContext(chapter)
+        if notes.notes:
+            note_links = [epub.Link(f"{file_name}#{quote(fn.id, safe='-._~')}", f"Catatan {marker}", f"note-{index}-{marker}")
+                          for marker, fn in notes.notes.items()]
+            nodes.append((epub.Link(f"{file_name}#{notes.section_id}", "Catatan kaki", f"notes-{index}"),
+                          [(link, []) for link in note_links]))
+        navigation.append((item, finalize(nodes)) if nodes else item)
+
+    book.toc = navigation
     book.add_item(epub.EpubNcx())
     book.add_item(epub.EpubNav())
     spine: list[object] = ["nav"]
@@ -177,9 +224,30 @@ def render_epub(
             # then fails the package because nothing hyperlinks to it (OPF-096).
             cover_page.is_linear = True
             spine.append(cover_page)
-    book.spine = spine + chapters
+    book.spine = spine + chapters + image_views
 
-    with tempfile.TemporaryDirectory() as tmp:
-        target = Path(tmp) / "book.epub"
-        epub.write_epub(str(target), book)
-        return target.read_bytes()
+    return _write_book_bytes(book)
+
+
+def _write_book_bytes(book: epub.EpubBook) -> bytes:
+    """Write in memory and close ZIP handles even if EbookLib raises.
+
+    EbookLib's public write_epub helper can swallow OSError and leaves its
+    ZIP open on other failures. On Windows a temporary-file cleanup then
+    masks the real error with WinError 32. Avoid the filesystem entirely.
+    """
+    with io.BytesIO() as output:
+        writer = epub.EpubWriter(output, book, options={"raise_exceptions": True, "epub3_pages": False})
+        try:
+            writer.process()
+            writer.write()
+        except BaseException:
+            archive = getattr(writer, "out", None)
+            if archive is not None:
+                with suppress(Exception):
+                    archive.close()
+            raise
+        archive = getattr(writer, "out", None)
+        if archive is not None:
+            archive.close()
+        return output.getvalue()

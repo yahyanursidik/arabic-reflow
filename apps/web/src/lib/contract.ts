@@ -14,11 +14,39 @@ export class ContractError extends Error {
   }
 }
 
+export interface TextRepairResult {
+  changedBlockIds: string[];
+  unchangedBlockIds: string[];
+  skippedBlockIds: string[];
+  reviewBlockIds: string[];
+}
+
+export function parseTextRepairResult(value: unknown): TextRepairResult {
+  if (!isRecord(value)) throw new ContractError("repair", "expected object");
+  const ids = (key: string): string[] => {
+    const items = value[key];
+    if (!Array.isArray(items) || items.some((item) => typeof item !== "string")) {
+      throw new ContractError("repair", `${key} must be a string array`);
+    }
+    return items as string[];
+  };
+  return {
+    changedBlockIds: ids("changed_block_ids"),
+    unchangedBlockIds: ids("unchanged_block_ids"),
+    skippedBlockIds: ids("skipped_block_ids"),
+    reviewBlockIds: ids("review_block_ids"),
+  };
+}
+
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === "object" && value !== null && !Array.isArray(value);
 }
 
-function reqString(parent: Record<string, unknown>, path: string, key: string): string {
+function reqString(
+  parent: Record<string, unknown>,
+  path: string,
+  key: string,
+): string {
   const value = parent[key];
   if (typeof value !== "string" || value.length === 0) {
     throw new ContractError(path, `${key} must be a non-empty string`);
@@ -26,17 +54,28 @@ function reqString(parent: Record<string, unknown>, path: string, key: string): 
   return value;
 }
 
-function optString(parent: Record<string, unknown>, key: string): string | undefined {
+function optString(
+  parent: Record<string, unknown>,
+  key: string,
+): string | undefined {
   const value = parent[key];
   return typeof value === "string" ? value : undefined;
 }
 
-function optNumber(parent: Record<string, unknown>, key: string): number | undefined {
+function optNumber(
+  parent: Record<string, unknown>,
+  key: string,
+): number | undefined {
   const value = parent[key];
-  return typeof value === "number" && Number.isFinite(value) ? value : undefined;
+  return typeof value === "number" && Number.isFinite(value)
+    ? value
+    : undefined;
 }
 
-function optBool(parent: Record<string, unknown>, key: string): boolean | undefined {
+function optBool(
+  parent: Record<string, unknown>,
+  key: string,
+): boolean | undefined {
   const value = parent[key];
   return typeof value === "boolean" ? value : undefined;
 }
@@ -86,16 +125,25 @@ export interface Job {
   error?: string;
 }
 
-export type UiNode = { kind: "text"; text: string } | {
-  kind: "span";
-  text: string;
-  lang?: string;
-  dir?: string;
-};
+export type UiNode =
+  | { kind: "text"; text: string }
+  | { kind: "image"; text: string; resourceId: string }
+  | {
+      kind: "span";
+      text: string;
+      lang?: string;
+      dir?: string;
+    };
 
 export type UiBlockType =
-  | "heading" | "paragraph" | "quote" | "list" | "image" | "table"
-  | "footnote" | "page_break";
+  | "heading"
+  | "paragraph"
+  | "quote"
+  | "list"
+  | "image"
+  | "table"
+  | "footnote"
+  | "page_break";
 
 export interface UiBlock {
   id: string;
@@ -113,7 +161,15 @@ export interface UiBlock {
   modifiedByUser: boolean;
   resourceId?: string;
   captionBlockId?: string;
+  fallbackResourceId?: string;
   blocks?: UiBlock[]; // footnote inner blocks
+  ordered?: boolean;
+  items?: UiBlock[][];
+  rows?: { text: string; lang?: string; dir?: string }[][];
+  alt?: string;
+  parentId?: string;
+  canMoveUp?: boolean;
+  canMoveDown?: boolean;
 }
 
 export interface UiResource {
@@ -141,6 +197,7 @@ export interface UiReflow {
 }
 
 export interface UiReport {
+  restorableBlockIds: string[];
   integrity?: {
     score?: number;
     level?: string;
@@ -150,6 +207,68 @@ export interface UiReport {
     issues: string[];
   };
   warnings: UiWarning[];
+  quality?: {
+    blockCount: number;
+    editedBlockCount: number;
+    reviewBlockIds: string[];
+    canExport: boolean;
+    pages: { page: number; blockCount: number; reviewBlockIds: string[] }[];
+    issues: UiWarning[];
+  };
+}
+
+export interface Capabilities {
+  epubcheckAvailable: boolean;
+  ocr: {
+    engines: {
+      name: "paddle" | "tesseract";
+      available: boolean;
+      languages: string[];
+      message: string;
+    }[];
+  };
+}
+
+export interface ConversionOptions {
+  mode: "native" | "auto" | "force";
+  engine?: "paddle" | "tesseract";
+  languages: ("ar" | "id" | "en")[];
+}
+
+export interface BlockUpdate {
+  text?: string;
+  lang?: string;
+  dir?: string;
+  type?: "paragraph" | "heading" | "quote";
+  level?: number;
+  alt?: string;
+}
+
+export function parseCapabilities(value: unknown): Capabilities {
+  if (!isRecord(value) || !isRecord(value.ocr))
+    throw new ContractError("capabilities", "missing OCR information");
+  return {
+    epubcheckAvailable:
+      isRecord(value.validation) &&
+      optBool(value.validation, "epubcheck") === true,
+    ocr: {
+      engines: array(value.ocr.engines).map((item) => {
+        if (
+          !isRecord(item) ||
+          !["paddle", "tesseract"].includes(String(item.name))
+        )
+          throw new ContractError("capabilities.ocr.engines", "unknown engine");
+        return {
+          name: item.name as "paddle" | "tesseract",
+          available: optBool(item, "available") ?? false,
+          languages: array(item.languages).filter(
+            (entry): entry is string => typeof entry === "string",
+          ),
+          message: optString(item, "message") ?? "",
+        };
+      }),
+    },
+  };
 }
 
 // --- Parsers -----------------------------------------------------------------
@@ -165,7 +284,8 @@ export function parseDocumentMeta(value: unknown): DocumentMeta {
 export function parseProfile(value: unknown): Profile {
   if (!isRecord(value)) throw new ContractError("profile", "not an object");
   const pages: ProfilePage[] = array(value.pages).map((raw, index) => {
-    if (!isRecord(raw)) throw new ContractError(`profile.pages[${index}]`, "not an object");
+    if (!isRecord(raw))
+      throw new ContractError(`profile.pages[${index}]`, "not an object");
     return {
       page: optNumber(raw, "page") ?? index + 1,
       textChars: optNumber(raw, "text_chars") ?? 0,
@@ -179,12 +299,15 @@ export function parseProfile(value: unknown): Profile {
   return {
     pageCount: optNumber(value, "page_count") ?? pages.length,
     classification: optString(value, "classification") ?? "unknown",
-    classificationConfidence: optNumber(value, "classification_confidence") ?? 0,
+    classificationConfidence:
+      optNumber(value, "classification_confidence") ?? 0,
     textLayer: optBool(value, "text_layer") ?? false,
     imageDominant: optBool(value, "image_dominant") ?? false,
     arabicDetected: optBool(value, "arabic_detected") ?? false,
     scannedPages: pages.filter((p) => p.scannedLike).map((p) => p.page),
-    likelyMulticolumnPages: pages.filter((p) => p.likelyMulticolumn).map((p) => p.page),
+    likelyMulticolumnPages: pages
+      .filter((p) => p.likelyMulticolumn)
+      .map((p) => p.page),
     pages,
   };
 }
@@ -202,7 +325,8 @@ export function parseJob(value: unknown): Job {
     stage: optString(value, "stage") ?? "uploaded",
     progress: optNumber(value, "progress") ?? 0,
     warnings: array(value.warnings).map((w) => {
-      if (!isRecord(w)) throw new ContractError("job.warnings[]", "not an object");
+      if (!isRecord(w))
+        throw new ContractError("job.warnings[]", "not an object");
       return {
         code: optString(w, "code") ?? "UNKNOWN",
         message: optString(w, "message") ?? "",
@@ -221,10 +345,20 @@ function parseIntegrity(parent: Record<string, unknown>): number | undefined {
 function parseNodes(parent: Record<string, unknown>, path: string): UiNode[] {
   const content = array(parent.content);
   return content.map((node, index) => {
-    if (!isRecord(node)) throw new ContractError(`${path}.content[${index}]`, "not an object");
+    if (!isRecord(node))
+      throw new ContractError(`${path}.content[${index}]`, "not an object");
     const text = typeof node.text === "string" ? node.text : "";
+    if (node.type === "inline_image") {
+      return { kind: "image", text: optString(node, "alt") ?? "",
+        resourceId: reqString(node, `${path}.content[${index}]`, "resource_id") };
+    }
     if (node.type === "span") {
-      return { kind: "span", text, lang: optString(node, "lang"), dir: optString(node, "dir") };
+      return {
+        kind: "span",
+        text,
+        lang: optString(node, "lang"),
+        dir: optString(node, "dir"),
+      };
     }
     return { kind: "text", text };
   });
@@ -234,22 +368,65 @@ function parseBlock(raw: unknown, path: string): UiBlock {
   if (!isRecord(raw)) throw new ContractError(path, "not an object");
   const type = optString(raw, "type");
   const known: UiBlockType[] = [
-    "heading", "paragraph", "quote", "list", "image", "table", "footnote", "page_break",
+    "heading",
+    "paragraph",
+    "quote",
+    "list",
+    "image",
+    "table",
+    "footnote",
+    "page_break",
   ];
   if (!type || !known.includes(type as UiBlockType)) {
-    throw new ContractError(`${path}.type`, `unknown block type ${String(type)}`);
+    throw new ContractError(
+      `${path}.type`,
+      `unknown block type ${String(type)}`,
+    );
   }
 
   let text = "";
   if (typeof raw.text === "string") {
     text = raw.text;
   } else if (type === "paragraph") {
-    text = parseNodes(raw, path).map((n) => n.text).join("");
+    text = parseNodes(raw, path)
+      .map((n) => n.text)
+      .join("");
   }
 
   const blocks = array(raw.blocks).map((inner, index) =>
     parseBlock(inner, `${path}.blocks[${index}]`),
   );
+  const items = array(raw.items).map((item, index) => {
+    if (!isRecord(item))
+      throw new ContractError(`${path}.items[${index}]`, "not an object");
+    return array(item.blocks).map((inner, innerIndex) =>
+      parseBlock(inner, `${path}.items[${index}].blocks[${innerIndex}]`),
+    );
+  });
+  const rows = array(raw.rows).map((row, index) =>
+    array(row).map((cell, cellIndex) => {
+      if (!isRecord(cell))
+        throw new ContractError(
+          `${path}.rows[${index}][${cellIndex}]`,
+          "not an object",
+        );
+      return {
+        text: optString(cell, "text") ?? "",
+        lang: optString(cell, "lang"),
+        dir: optString(cell, "dir"),
+      };
+    }),
+  );
+  if (type === "list")
+    text = items
+      .flat()
+      .map((block) => block.text)
+      .join("\n");
+  if (type === "table")
+    text = rows
+      .map((row) => row.map((cell) => cell.text).join(" | "))
+      .join("\n");
+  if (type === "footnote") text = blocks.map((block) => block.text).join("\n");
 
   return {
     id: reqString(raw, path, "id"),
@@ -262,12 +439,19 @@ function parseBlock(raw: unknown, path: string): UiBlock {
     text,
     nodes: type === "paragraph" ? parseNodes(raw, path) : [],
     confidence: optNumber(raw, "confidence"),
-    warnings: array(raw.warnings).filter((w): w is string => typeof w === "string"),
+    warnings: array(raw.warnings).filter(
+      (w): w is string => typeof w === "string",
+    ),
     integrityScore: parseIntegrity(raw),
     modifiedByUser: optBool(raw, "modified_by_user") ?? false,
     resourceId: optString(raw, "resource_id"),
     captionBlockId: optString(raw, "caption_block_id"),
+    fallbackResourceId: optString(raw, "fallback_resource_id"),
     blocks: type === "footnote" ? blocks : undefined,
+    ordered: optBool(raw, "ordered"),
+    items: type === "list" ? items : undefined,
+    rows: type === "table" ? rows : undefined,
+    alt: optString(raw, "alt"),
   };
 }
 
@@ -275,9 +459,12 @@ export function parseReflow(value: unknown): UiReflow {
   if (!isRecord(value)) throw new ContractError("reflow", "not an object");
   const blocks: UiBlock[] = [];
   for (const [chapterIndex, chapter] of array(value.chapters).entries()) {
-    if (!isRecord(chapter)) throw new ContractError(`chapters[${chapterIndex}]`, "not an object");
+    if (!isRecord(chapter))
+      throw new ContractError(`chapters[${chapterIndex}]`, "not an object");
     for (const [blockIndex, block] of array(chapter.blocks).entries()) {
-      blocks.push(parseBlock(block, `chapters[${chapterIndex}].blocks[${blockIndex}]`));
+      blocks.push(
+        parseBlock(block, `chapters[${chapterIndex}].blocks[${blockIndex}]`),
+      );
     }
   }
 
@@ -286,7 +473,8 @@ export function parseReflow(value: unknown): UiReflow {
     if (!isRecord(raw)) continue;
     const id = typeof raw.id === "string" ? raw.id : undefined;
     if (!id) continue;
-    const mediaType = optString(raw, "media_type") ?? "application/octet-stream";
+    const mediaType =
+      optString(raw, "media_type") ?? "application/octet-stream";
     const content = typeof raw.content === "string" ? raw.content : undefined;
     resources[id] = {
       id,
@@ -296,7 +484,8 @@ export function parseReflow(value: unknown): UiReflow {
   }
 
   const warnings: UiWarning[] = array(value.warnings).map((w, index) => {
-    if (!isRecord(w)) throw new ContractError(`warnings[${index}]`, "not an object");
+    if (!isRecord(w))
+      throw new ContractError(`warnings[${index}]`, "not an object");
     return {
       code: optString(w, "code") ?? "UNKNOWN",
       severity: optString(w, "severity") ?? "info",
@@ -308,9 +497,13 @@ export function parseReflow(value: unknown): UiReflow {
   const metadata = isRecord(value.metadata) ? value.metadata : {};
   return {
     documentId: optString(value, "document_id") ?? "",
-    languages: array(metadata.languages).filter((l): l is string => typeof l === "string"),
+    languages: array(metadata.languages).filter(
+      (l): l is string => typeof l === "string",
+    ),
     title: optString(metadata, "title") ?? "",
-    author: array(metadata.author).filter((a): a is string => typeof a === "string"),
+    author: array(metadata.author).filter(
+      (a): a is string => typeof a === "string",
+    ),
     coverResourceId: optString(metadata, "cover_resource_id"),
     blocks,
     resources,
@@ -321,6 +514,7 @@ export function parseReflow(value: unknown): UiReflow {
 export function parseReport(value: unknown): UiReport {
   if (!isRecord(value)) throw new ContractError("report", "not an object");
   const integrity = isRecord(value.integrity) ? value.integrity : undefined;
+  const quality = isRecord(value.quality) ? value.quality : undefined;
   const pageScores: Record<string, number> = {};
   if (integrity && isRecord(integrity.page_scores)) {
     for (const [key, score] of Object.entries(integrity.page_scores)) {
@@ -328,20 +522,58 @@ export function parseReport(value: unknown): UiReport {
     }
   }
   return {
+    quality: quality
+      ? {
+          blockCount: optNumber(quality, "block_count") ?? 0,
+          editedBlockCount: optNumber(quality, "edited_block_count") ?? 0,
+          reviewBlockIds: array(quality.review_block_ids).filter(
+            (id): id is string => typeof id === "string",
+          ),
+          canExport: optBool(quality, "can_export") ?? false,
+          pages: array(quality.pages).map((page) => {
+            if (!isRecord(page))
+              throw new ContractError("quality.pages", "not an object");
+            return {
+              page: optNumber(page, "page") ?? 1,
+              blockCount: optNumber(page, "block_count") ?? 0,
+              reviewBlockIds: array(page.review_block_ids).filter(
+                (id): id is string => typeof id === "string",
+              ),
+            };
+          }),
+          issues: array(quality.issues).map((issue) => {
+            if (!isRecord(issue))
+              throw new ContractError("quality.issues", "not an object");
+            return {
+              code: optString(issue, "code") ?? "UNKNOWN",
+              severity: optString(issue, "severity") ?? "warning",
+              message: optString(issue, "message") ?? "",
+            };
+          }),
+        }
+      : undefined,
+    restorableBlockIds: isRecord(value.review)
+      ? array(value.review.restorable_block_ids).filter(
+          (id): id is string => typeof id === "string",
+        )
+      : [],
     integrity: integrity
       ? {
           score: optNumber(integrity, "score"),
           level: optString(integrity, "level"),
           blockCount: optNumber(integrity, "block_count") ?? 0,
           pageScores,
-          lowConfidenceBlockIds: array(integrity.low_confidence_block_ids).filter(
-            (id): id is string => typeof id === "string",
+          lowConfidenceBlockIds: array(
+            integrity.low_confidence_block_ids,
+          ).filter((id): id is string => typeof id === "string"),
+          issues: array(integrity.issues).filter(
+            (i): i is string => typeof i === "string",
           ),
-          issues: array(integrity.issues).filter((i): i is string => typeof i === "string"),
         }
       : undefined,
     warnings: array(value.warnings).map((w, index) => {
-      if (!isRecord(w)) throw new ContractError(`report.warnings[${index}]`, "not an object");
+      if (!isRecord(w))
+        throw new ContractError(`report.warnings[${index}]`, "not an object");
       return {
         code: optString(w, "code") ?? "UNKNOWN",
         severity: optString(w, "severity") ?? "info",

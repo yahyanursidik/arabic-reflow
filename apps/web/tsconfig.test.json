@@ -1,0 +1,21 @@
+{
+  "compilerOptions": {
+    "target": "ES2022",
+    "module": "Node16",
+    "moduleResolution": "Node16",
+    "rootDir": "src/lib",
+    "outDir": ".test-build",
+    "strict": true,
+    "noUncheckedIndexedAccess": true,
+    "skipLibCheck": true,
+    "esModuleInterop": true,
+    "types": ["node"]
+  },
+  "include": [
+    "src/lib/contract.ts",
+    "src/lib/api.ts",
+    "src/lib/files.ts",
+    "src/lib/history.ts",
+    "src/lib/review.ts"
+  ]
+}

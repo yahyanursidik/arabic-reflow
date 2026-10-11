@@ -41,15 +41,19 @@ GET /reflow → PATCH /blocks/{id} → POST /export/epub
 ```
 
 Conversions run in background threads; failures set `status: "failed"` with an
-`error` message. Job state is persisted per document so a restart shows the
-last known state.
+`error` message. The document job endpoint returns the latest job, including
+after reconversion. Only one conversion per document may run at a time (409
+for duplicate starts). Mutations and EPUB exports return 409 while converting.
+After a server restart, interrupted jobs become failed and can be retried.
+The MVP registry is single-process; use one API worker, not multiple workers.
 
 ## Security posture (PRD section 12)
 
 - only `%PDF-` magic bytes accepted; `text/plain` disguises get 415;
 - filenames sanitized to `A-Za-z0-9._-` (path traversal impossible);
 - encrypted PDFs are rejected — passwords are never accepted or stored;
-- 100 MB upload cap;
+- 100 MB upload cap (the API reads at most the limit plus one byte);
+- document IDs are validated before filesystem access; JSON writes use atomic replacement;
 - document contents are never logged.
 
 ## Block edits
@@ -60,11 +64,30 @@ outer pixel ring is free of ink, because real-world PDFs often report text
 bboxes tighter than the actual glyph ink (broken subset-font metrics),
 which used to clip harakat and descenders.
 
+For a source quotation split into touching fragments, `POST
+.../blocks/{block_id}/render-image` also accepts an optional JSON body
+`{"block_ids": ["first", "second"]}`. The anchor must be the first ID;
+all requested text blocks must be consecutive siblings, in reading order,
+with source geometry on the same PDF page. The action replaces the group
+with one image of its combined source region, avoiding duplicate glyphs at
+fragment boundaries. `restore-text` on that image restores all original
+fragments in order, preserving text from before their first edits.
+
 `PATCH .../blocks/{block_id}` supports `text`, `lang`, and `dir` for
-paragraph/heading/quote blocks. A text edit replaces the paragraph's content
-with a single text node (inline span reconstruction from arbitrary user text
-is a later concern) and always sets `modified_by_user: true`, per PRD section
-10. Export re-renders from the edited ReflowDoc.
+paragraph/heading/quote blocks. Mixed-script paragraph edits retain inline
+language/direction isolation without altering any character, including harakat.
+Edits set `modified_by_user: true`, per PRD section 10. Text before the first
+edit or normalization is preserved for explicit restoration through
+`POST .../blocks/{block_id}/restore-text`. This restores the whole initial
+block, not the immediately preceding edit. Report responses include
+`review.restorable_block_ids` so the UI only offers restoration when available.
+Arabic integrity annotations refresh after edits, and `/report` is assembled
+from the current ReflowDoc rather than a stale conversion-time cache.
+Export re-renders from the edited ReflowDoc.
+
+`Content-Disposition` is exposed to web clients through CORS so downloaded
+EPUBs keep their filename. For non-default web origins, set
+`REFLOW_CORS_ORIGINS` to a comma-separated list of explicit origins.
 
 ## Running
 
@@ -81,3 +104,40 @@ Interactive docs: `http://localhost:8000/docs`.
 upload validation (non-PDF, fake PDF, encrypted, hostile filenames), analyze,
 conversion to completion, reflow/report retrieval, block edits (persisted and
 marked), export validity, and the empty-document (scanned) path.
+
+## Engine/review feature extensions
+
+- `GET /api/v1/capabilities`: OCR runtimes, available language data, processing
+  modes, upload limit, and optional EPUBCheck availability. It does not initialize
+  Paddle models or download anything.
+- `POST .../convert`: optional `mode: native | auto | force`, `engine: paddle |
+  tesseract`, and `languages: [ar, id, en]`. Legacy `ocr: bool` remains accepted;
+  an explicit mode takes precedence. Auto on a healthy native PDF needs no OCR
+  runtime. Force requires explicit user consent in the UI.
+- `PATCH .../blocks/{block_id}` also accepts `type: paragraph | heading | quote`,
+  `level: 1..6` (heading only), and `alt` (image only). Invalid type/field combinations
+  return 422 before writing originals. Nested list/footnote paragraphs are supported.
+- `POST .../blocks/{block_id}/move` accepts `{direction: up | down}`. Moves only
+  within its sibling group and rejects boundary/cross-group moves (422).
+- `/report` now contains `quality` (recursive counts, page review targets, structural
+  issues, and `can_export`) and `ocr` (persisted conversion decisions/confidence,
+  without rejected candidate text).
+- `POST .../export/epub?validation=w3c` performs optional local EPUBCheck validation;
+  unavailable validator returns 503, rejected package returns 422. Internal validation
+  always runs. Empty content, duplicate IDs, and broken resource references block export.
+
+See `docs/engine-features.md` for local setup and supported UI subfeatures.
+# Perbaikan teks eksplisit
+
+- `POST /api/v1/documents/{id}/blocks/{block_id}/repair-text`: perbaiki satu
+  paragraf/judul/kutipan tanpa menebak kata. Cadangan sebelum suntingan pertama
+  tetap tersedia melalui `.../restore-text`.
+- `POST /api/v1/documents/{id}/repair-text` dengan JSON
+  `{"block_ids": ["block-001", "block-002"]}`: memproses ID yang dipilih sekali,
+  melewati blok nonteks dan blok yang sudah disunting. Maksimal 5000 ID.
+- Respons kedua endpoint memuat `changed_block_ids`, `unchanged_block_ids`,
+  `skipped_block_ids`, dan `review_block_ids`. Tidak ada perubahan aman berarti
+  blok tetap utuh, bukan klaim perbaikan berhasil.
+- Aksi terkunci selama konversi (409). Batch dengan ID yang tidak dikenal
+  ditolak sebelum perubahan apa pun (404). Isi dan laporan dibaca ulang setelah
+  aksi; ekspor EPUB berikutnya memakai hasil terbaru.

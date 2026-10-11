@@ -18,6 +18,12 @@ import {
   parseProfile,
   parseReflow,
   parseReport,
+  parseCapabilities,
+  Capabilities,
+  ConversionOptions,
+  BlockUpdate,
+  TextRepairResult,
+  parseTextRepairResult,
 } from "./contract";
 
 const API_BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://127.0.0.1:8000";
@@ -32,23 +38,61 @@ export class ApiError extends Error {
   }
 }
 
-async function request<T>(path: string, parse: (body: unknown) => T, init?: RequestInit): Promise<T> {
+export function apiErrorMessage(status: number, detail?: unknown): string {
+  if (status === 413) return "Ukuran PDF melebihi batas 100 MB.";
+  if (status === 415)
+    return "Berkas bukan PDF yang dapat dibaca. Coba buka PDF di perangkat Anda terlebih dahulu.";
+  if (status === 409)
+    return "Konversi masih berjalan. Tunggu hingga selesai sebelum mengubah atau mengekspor dokumen.";
+  if (typeof detail === "string") {
+    if (detail.toLowerCase().includes("encrypted"))
+      return "PDF dilindungi kata sandi. Unggah salinan PDF tanpa kata sandi.";
+    return detail;
+  }
+  if (status === 422)
+    return "Data belum valid. Periksa teks, judul, kode bahasa (contoh: id, ar), dan arah baca.";
+  return `Permintaan gagal (${status}). Silakan coba lagi.`;
+}
+
+async function fetchResponse(
+  path: string,
+  init?: RequestInit,
+): Promise<Response> {
   let response: Response;
   try {
-    response = await fetch(`${API_BASE}${path}`, init);
+    response = await fetch(`${API_BASE}${path}`, {
+      ...init,
+      cache: "no-store",
+      signal: init?.signal ?? AbortSignal.timeout(120_000),
+    });
   } catch (cause) {
-    throw new ApiError(0, `tidak dapat menghubungi API di ${API_BASE}`);
+    throw new ApiError(
+      0,
+      `Tidak dapat menghubungi server Reflow (${API_BASE}). Pastikan API berjalan, lalu coba lagi.`,
+    );
   }
   if (!response.ok) {
-    let detail = `${response.status}`;
+    let detail: unknown;
     try {
       const body = (await response.json()) as { detail?: unknown };
-      if (typeof body.detail === "string") detail = body.detail;
+      detail = body.detail;
     } catch {
       // keep status-only message
     }
-    throw new ApiError(response.status, detail);
+    throw new ApiError(
+      response.status,
+      apiErrorMessage(response.status, detail),
+    );
   }
+  return response;
+}
+
+async function request<T>(
+  path: string,
+  parse: (body: unknown) => T,
+  init?: RequestInit,
+): Promise<T> {
+  const response = await fetchResponse(path, init);
   const body: unknown = await response.json();
   return parse(body);
 }
@@ -56,10 +100,17 @@ async function request<T>(path: string, parse: (body: unknown) => T, init?: Requ
 export const api = {
   baseUrl: API_BASE,
 
+  async getCapabilities(): Promise<Capabilities> {
+    return request("/api/v1/capabilities", parseCapabilities);
+  },
+
   async upload(file: File): Promise<DocumentMeta> {
     const form = new FormData();
     form.append("file", file, file.name);
-    return request("/api/v1/documents", parseDocumentMeta, { method: "POST", body: form });
+    return request("/api/v1/documents", parseDocumentMeta, {
+      method: "POST",
+      body: form,
+    });
   },
 
   async getDocument(id: string): Promise<DocumentMeta> {
@@ -67,7 +118,9 @@ export const api = {
   },
 
   async analyze(id: string): Promise<Profile> {
-    return request(`/api/v1/documents/${id}/analyze`, parseProfile, { method: "POST" });
+    return request(`/api/v1/documents/${id}/analyze`, parseProfile, {
+      method: "POST",
+    });
   },
 
   async getProfile(id: string): Promise<Profile | null> {
@@ -79,11 +132,20 @@ export const api = {
     }
   },
 
-  async convert(id: string, ocr: boolean): Promise<{ jobId: string }> {
+  async convert(
+    id: string,
+    options: boolean | ConversionOptions,
+  ): Promise<{ jobId: string }> {
     const body = await request<{ job_id?: string }>(
       `/api/v1/documents/${id}/convert`,
       (value) => value as { job_id?: string },
-      { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ocr }) },
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(
+          typeof options === "boolean" ? { ocr: options } : options,
+        ),
+      },
     );
     if (typeof body.job_id !== "string") {
       throw new ContractError("convert", "missing job_id");
@@ -112,10 +174,39 @@ export const api = {
     return request(`/api/v1/documents/${id}/report`, parseReport);
   },
 
+  async downloadEpub(
+    id: string,
+    w3c = false,
+  ): Promise<{ blob: Blob; filename: string }> {
+    const response = await fetchResponse(
+      `/api/v1/documents/${id}/export/epub${w3c ? "?validation=w3c" : ""}`,
+      { method: "POST" },
+    );
+    const disposition = response.headers.get("content-disposition") ?? "";
+    const encoded = /filename\*=UTF-8''([^;]+)/i.exec(disposition);
+    const plain = /filename="?([^";]+)"?/i.exec(disposition);
+    let filename = plain?.[1] ?? "document.epub";
+    if (encoded?.[1]) {
+      try {
+        filename = decodeURIComponent(encoded[1]);
+      } catch {
+        /* fall back to plain name */
+      }
+    }
+    return { blob: await response.blob(), filename };
+  },
+
+  async downloadJson(id: string, kind: "reflow" | "report"): Promise<Blob> {
+    const response = await fetchResponse(`/api/v1/documents/${id}/${kind}`);
+    return new Blob([JSON.stringify(await response.json(), null, 2)], {
+      type: "application/json",
+    });
+  },
+
   async updateBlock(
     id: string,
     blockId: string,
-    update: { text?: string; lang?: string; dir?: string },
+    update: BlockUpdate,
   ): Promise<UiBlock> {
     return request(
       `/api/v1/documents/${id}/blocks/${blockId}`,
@@ -132,6 +223,22 @@ export const api = {
         method: "PATCH",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify(update),
+      },
+    );
+  },
+
+  async moveBlock(
+    id: string,
+    blockId: string,
+    direction: "up" | "down",
+  ): Promise<void> {
+    await request(
+      `/api/v1/documents/${id}/blocks/${blockId}/move`,
+      () => undefined,
+      {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ direction }),
       },
     );
   },
@@ -184,6 +291,18 @@ export const api = {
     );
   },
 
+  async repairText(id: string, blockId: string): Promise<TextRepairResult> {
+    return request(`/api/v1/documents/${id}/blocks/${blockId}/repair-text`, parseTextRepairResult, { method: "POST" });
+  },
+
+  async repairProblemBlocks(id: string, blockIds: string[]): Promise<TextRepairResult> {
+    return request(`/api/v1/documents/${id}/repair-text`, parseTextRepairResult, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ block_ids: blockIds }),
+    });
+  },
+
   exportEpubUrl(id: string): string {
     return `${API_BASE}/api/v1/documents/${id}/export/epub`;
   },
@@ -203,13 +322,25 @@ export interface CoverResult {
   source_page?: number;
 }
 
+export interface MetadataResult extends CoverResult {
+  title: string;
+  author: string[];
+}
+
 export const bookApi = {
-  async updateMetadata(id: string, update: BookMetadata): Promise<CoverResult> {
-    return request(`/api/v1/documents/${id}/metadata`, (value) => value as CoverResult, {
-      method: "PATCH",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(update),
-    });
+  async updateMetadata(
+    id: string,
+    update: BookMetadata,
+  ): Promise<MetadataResult> {
+    return request(
+      `/api/v1/documents/${id}/metadata`,
+      (value) => value as MetadataResult,
+      {
+        method: "PATCH",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(update),
+      },
+    );
   },
 
   async setCover(id: string, page: number): Promise<CoverResult> {
@@ -221,8 +352,12 @@ export const bookApi = {
   },
 
   async clearCover(id: string): Promise<CoverResult> {
-    return request(`/api/v1/documents/${id}/cover`, (value) => value as CoverResult, {
-      method: "DELETE",
-    });
+    return request(
+      `/api/v1/documents/${id}/cover`,
+      (value) => value as CoverResult,
+      {
+        method: "DELETE",
+      },
+    );
   },
 };

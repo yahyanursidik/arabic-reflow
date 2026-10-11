@@ -1,11 +1,14 @@
 {
   "name": "reflow-web",
-  "version": "0.1.0",
+  "version": "0.8.0",
   "private": true,
   "scripts": {
     "dev": "next dev",
     "build": "next build",
     "start": "next start",
+    "typecheck": "tsc --noEmit",
+    "test": "tsc -p tsconfig.test.json && node --test tests/*.test.cjs",
+    "test:e2e": "playwright test",
     "generate:types": "json2ts ../../packages/schemas/reflowdoc.schema.json src/lib/reflowdoc.d.ts"
   },
   "dependencies": {
@@ -14,6 +17,7 @@
     "react-dom": "19.2.0"
   },
   "devDependencies": {
+    "@playwright/test": "^1.64.0",
     "@tailwindcss/postcss": "4.3.3",
     "@types/node": "24.10.1",
     "@types/react": "19.2.5",

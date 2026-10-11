@@ -66,6 +66,15 @@ def test_upload_rejects_fake_pdf_extension(client) -> None:
     assert response.status_code == 415
 
 
+def test_upload_enforces_size_limit(client, fixtures_dir, monkeypatch):
+    monkeypatch.setattr("apps.api.main.MAX_UPLOAD_BYTES", 16)
+    response = client.post(
+        "/api/v1/documents",
+        files={"file": ("book.pdf", (fixtures_dir / "mixed-id-ar.pdf").read_bytes(), "application/pdf")},
+    )
+    assert response.status_code == 413
+
+
 def test_upload_rejects_encrypted_pdf(tmp_path, client) -> None:
     doc = pymupdf.open()
     doc.new_page().insert_text((72, 72), "rahasia")
@@ -173,6 +182,8 @@ def test_reflow_endpoint_returns_document(client, fixtures_dir) -> None:
     assert response.status_code == 200
     reflow = response.json()
     assert reflow["schema_version"] == "0.1"
+    assert reflow["document_id"] == meta["id"]
+    assert reflow["metadata"]["source_filename"] == meta["filename"]
     chapter = reflow["chapters"][0]
     texts = [
         "".join(node["text"] for node in b.get("content", []))
@@ -479,3 +490,153 @@ def test_cover_rejects_out_of_range_page(client, fixtures_dir) -> None:
     meta, _job = _convert_and_wait(client, fixtures_dir)
     response = client.post(f"/api/v1/documents/{meta['id']}/cover", params={"page": 99})
     assert response.status_code == 404
+
+
+def test_reconversion_document_endpoint_returns_latest_job(client, fixtures_dir):
+    meta, first = _convert_and_wait(client, fixtures_dir)
+    response = client.post(f"/api/v1/documents/{meta['id']}/convert", json={"ocr": False})
+    second = _wait_for_job(client, response.json()["job_id"])
+    assert second["id"] != first["id"]
+    assert client.get(f"/api/v1/documents/{meta['id']}/job").json()["id"] == second["id"]
+
+
+def test_duplicate_conversion_and_edits_are_rejected_while_running(client, fixtures_dir, monkeypatch):
+    meta = _upload(client, fixtures_dir, "mixed-id-ar.pdf")
+    monkeypatch.setattr("apps.api.main.run_conversion", lambda **kwargs: None)
+    path = f"/api/v1/documents/{meta['id']}"
+    assert client.post(f"{path}/convert", json={"ocr": False}).status_code == 202
+    assert client.post(f"{path}/convert", json={"ocr": False}).status_code == 409
+    assert client.patch(f"{path}/metadata", json={"title": "A title"}).status_code == 409
+    assert client.post(f"{path}/export/epub").status_code == 409
+
+
+def test_mixed_edit_preserves_bidi_harakat_and_is_reversible(client, fixtures_dir):
+    meta, _ = _convert_and_wait(client, fixtures_dir)
+    path = f"/api/v1/documents/{meta['id']}"
+    reflow = client.get(f"{path}/reflow").json()
+    block = next(b for b in reflow["chapters"][0]["blocks"] if b["type"] == "paragraph")
+    original = _reflow_block_text(block)
+    text = "Hadits dari أَبِي هُرَيْرَةَ, dalam kitab."
+    updated = client.patch(f"{path}/blocks/{block['id']}", json={"text": text}).json()
+    assert _reflow_block_text(updated) == text
+    assert block["id"] in client.get(f"{path}/report").json()["review"]["restorable_block_ids"]
+    assert any(n.get("dir") == "rtl" and n.get("lang") == "ar" for n in updated["content"])
+    export = client.post(f"{path}/export/epub")
+    package = zipfile.ZipFile(io.BytesIO(export.content))
+    xhtml = "".join(package.read(n).decode("utf-8") for n in package.namelist() if n.endswith(".xhtml"))
+    assert "أَبِي هُرَيْرَةَ" in xhtml and 'dir="rtl"' in xhtml
+    restored = client.post(f"{path}/blocks/{block['id']}/restore-text")
+    assert restored.status_code == 200
+    assert _reflow_block_text(restored.json()) == original
+    assert block["id"] not in client.get(f"{path}/report").json()["review"]["restorable_block_ids"]
+
+
+def test_report_reflects_current_edits(client, fixtures_dir):
+    meta, _ = _convert_and_wait(client, fixtures_dir, "arabic-native.pdf")
+    path = f"/api/v1/documents/{meta['id']}"
+    document = client.get(f"{path}/reflow").json()
+    for block in document["chapters"][0]["blocks"]:
+        if block["type"] in ("paragraph", "heading", "quote"):
+            assert client.patch(f"{path}/blocks/{block['id']}", json={"text": "Teks Latin."}).status_code == 200
+    report = client.get(f"{path}/report").json()
+    assert report["integrity"]["block_count"] == 0
+    assert report["integrity"]["score"] is None
+
+
+def test_blank_metadata_title_is_rejected(client, fixtures_dir):
+    meta, _ = _convert_and_wait(client, fixtures_dir)
+    assert client.patch(f"/api/v1/documents/{meta['id']}/metadata", json={"title": "   "}).status_code == 422
+
+
+def test_export_exposes_download_filename_to_web(client, fixtures_dir):
+    meta, _ = _convert_and_wait(client, fixtures_dir)
+    response = client.post(f"/api/v1/documents/{meta['id']}/export/epub", headers={"Origin": "http://localhost:3000"})
+    assert "content-disposition" in response.headers["access-control-expose-headers"].lower()
+
+
+def test_capabilities_report_ocr_readiness_without_loading_models(client):
+    response = client.get("/api/v1/capabilities")
+    assert response.status_code == 200
+    assert {engine["name"] for engine in response.json()["ocr"]["engines"]} == {"paddle", "tesseract"}
+    assert response.json()["ocr"]["modes"] == ["native", "auto", "force"]
+
+
+def test_structural_edit_heading_level_and_restore_roundtrip(client, fixtures_dir):
+    meta, _ = _convert_and_wait(client, fixtures_dir)
+    path = f"/api/v1/documents/{meta['id']}"
+    original = next(block for block in client.get(f"{path}/reflow").json()["chapters"][0]["blocks"] if block["type"] == "paragraph")
+    changed = client.patch(f"{path}/blocks/{original['id']}", json={"type": "heading", "level": 2})
+    assert changed.status_code == 200
+    assert changed.json()["level"] == 2
+    assert changed.json()["text"] == _reflow_block_text(original)
+    restored = client.post(f"{path}/blocks/{original['id']}/restore-text")
+    assert restored.status_code == 200
+    assert restored.json()["type"] == "paragraph"
+    assert _reflow_block_text(restored.json()) == _reflow_block_text(original)
+
+
+def test_move_block_updates_epub_reading_order(client, fixtures_dir):
+    meta, _ = _convert_and_wait(client, fixtures_dir)
+    path = f"/api/v1/documents/{meta['id']}"
+    before = client.get(f"{path}/reflow").json()["chapters"][0]["blocks"]
+    result = client.post(f"{path}/blocks/{before[1]['id']}/move", json={"direction": "up"})
+    assert result.status_code == 200
+    after = client.get(f"{path}/reflow").json()["chapters"][0]["blocks"]
+    assert [block["id"] for block in after] == [before[1]["id"], before[0]["id"], *[block["id"] for block in before[2:]]]
+    assert client.post(f"{path}/blocks/{after[0]['id']}/move", json={"direction": "up"}).status_code == 422
+
+
+def test_image_alternative_text_is_saved_and_exported(client, fixtures_dir):
+    meta, _ = _convert_and_wait(client, fixtures_dir, "image-caption.pdf")
+    path = f"/api/v1/documents/{meta['id']}"
+    image = next(block for block in client.get(f"{path}/reflow").json()["chapters"][0]["blocks"] if block["type"] == "image")
+    assert client.patch(f"{path}/blocks/{image['id']}", json={"alt": 'Diagram "sumber"'}).status_code == 200
+    package = zipfile.ZipFile(io.BytesIO(client.post(f"{path}/export/epub").content))
+    from xml.etree import ElementTree
+    xhtml = ElementTree.fromstring(package.read("EPUB/chapter-001.xhtml"))
+    assert any(element.get("alt") == 'Diagram "sumber"' for element in xhtml.iter())
+
+
+def test_quality_report_and_empty_export_gate(client, fixtures_dir):
+    meta, _ = _convert_and_wait(client, fixtures_dir, "scanned.pdf")
+    path = f"/api/v1/documents/{meta['id']}"
+    quality = client.get(f"{path}/report").json()["quality"]
+    assert not quality["can_export"]
+    assert client.post(f"{path}/export/epub").status_code == 422
+
+
+def test_automatic_mode_on_native_document_does_not_require_ocr(client, fixtures_dir, monkeypatch):
+    meta = _upload(client, fixtures_dir, "indonesian-native.pdf")
+    def unavailable(*args):
+        raise AssertionError("OCR must not initialize for healthy native text")
+    monkeypatch.setattr("apps.api.services._pick_ocr_engine", unavailable)
+    response = client.post(f"/api/v1/documents/{meta['id']}/convert", json={"mode": "auto", "languages": ["id"]})
+    assert _wait_for_job(client, response.json()["job_id"])["status"] == "completed"
+
+
+def test_w3c_export_requires_ready_validator(client, fixtures_dir, monkeypatch):
+    meta, _ = _convert_and_wait(client, fixtures_dir)
+    monkeypatch.setattr("engine.validation.epubcheck.epubcheck_available", lambda: False)
+    response = client.post(f"/api/v1/documents/{meta['id']}/export/epub?validation=w3c")
+    assert response.status_code == 503
+
+
+def test_epub_export_handles_control_characters_without_altering_saved_text(client, fixtures_dir):
+    from xml.etree import ElementTree
+
+    meta, _ = _convert_and_wait(client, fixtures_dir)
+    path = f"/api/v1/documents/{meta['id']}"
+    block = next(item for item in client.get(f"{path}/reflow").json()["chapters"][0]["blocks"] if item["type"] == "heading")
+    text = "Judul\x1b dengan harakat إِنَّمَا"
+    assert client.patch(f"{path}/blocks/{block['id']}", json={"text": text}).status_code == 200
+    quality = client.get(f"{path}/report").json()["quality"]
+    assert block["id"] in quality["review_block_ids"]
+    assert quality["xml_output"]["codepoints"] == {"U+001B": 1}
+    response = client.post(f"{path}/export/epub")
+    assert response.status_code == 200
+    with zipfile.ZipFile(io.BytesIO(response.content)) as archive:
+        for name in archive.namelist():
+            if name.endswith((".xhtml", ".opf", ".ncx")):
+                ElementTree.fromstring(archive.read(name))
+    saved = client.get(f"{path}/reflow").json()["chapters"][0]["blocks"]
+    assert next(item for item in saved if item["id"] == block["id"])["text"] == text

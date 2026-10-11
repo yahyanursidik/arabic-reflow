@@ -28,14 +28,17 @@ without any OCR dependency.
 
 Requesting an engine whose dependency is missing raises
 `OcrEngineUnavailable` with install guidance; `available_engines()` lists
-what is actually importable.
+available runtimes without initializing/downloading models. Tesseract checks
+the executable and requested language packs, not just the Python package.
+PaddleOCR adapters support both v2 `.ocr()` and v3 `.predict()` APIs; readiness
+for Paddle indicates installed packages, not a guarantee that models exist.
 
 ## Decisions (M5-04) and confidence (M5-05)
 
 `engine/ocr/decision.py`:
 
 - a page goes to OCR when it has no usable text layer (scanned-like or
-  fewer than 20 characters);
+  fewer than 20 characters), or the Arabic integrity is demonstrably poor;
 - recognized text is synthesized into the **same raw model** the native
   extractor produces (`OcrSynthesized` font), so layout, reconstruction,
   and rendering are unchanged downstream;
@@ -67,3 +70,23 @@ result = build_reflowdoc("book.pdf", ocr_engine=engine)
 
 Without an engine, scanned pages simply produce no text (status quo) — the
 decision stage is pure and fully unit-tested against a fake engine.
+
+## Explicit processing modes
+
+The API accepts `mode: native | auto | force` and `languages: [ar, id, en]`.
+Legacy `{ocr: false}` maps to native and `{ocr: true}` maps to auto.
+Native preserves extraction only; auto uses per-page decisions and keeps
+the better native candidate when OCR is not better. Force replaces every
+page with OCR output only after explicit user selection/confirmation.
+The original PDF always remains available. Force is not a text repair tool.
+
+Tesseract language labels map to `ara`, `ind`, and `eng`. A language pack
+must exist for every selected language; missing packs are explained in
+`GET /api/v1/capabilities`. Recognition has a 120-second per-page timeout.
+OCR confidence is propagated to source blocks, and selected OCR pages get
+`OCR_USED` / `OCR_LOW_CONFIDENCE` markers. A rejected OCR attempt is not
+misreported as selected output.
+
+API quality reports retain page decisions, selection status, and confidence
+under `ocr`; rejected candidate text is not included in the public report.
+Local setup and actual runtime verification: `docs/engine-features.md`.

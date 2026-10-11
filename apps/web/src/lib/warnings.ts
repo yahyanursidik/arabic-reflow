@@ -11,8 +11,10 @@ export interface WarningCodeInfo {
 }
 
 const CODES: Record<string, WarningCodeInfo> = {
+  SOURCE_VERIFIED: { label: "Sudah dicocokkan dengan PDF sumber", needsReview: false },
   LOW_ARABIC_CONFIDENCE: { label: "Integritas Arab rendah", needsReview: true },
   ARABIC_RENDERED_AS_IMAGE: { label: "Dirender sebagai gambar", needsReview: false },
+  AUTO_TEXT_REPAIRED: { label: "Perbaikan teks otomatis diterapkan", needsReview: false },
   PARAGRAPH_MERGE_UNCERTAIN: { label: "Penggabungan paragraf ragu", needsReview: true },
   READING_ORDER_UNCERTAIN: { label: "Urutan baca ragu", needsReview: true },
   FOOTNOTE_UNCERTAIN: { label: "Catatan kaki heuristik", needsReview: true },

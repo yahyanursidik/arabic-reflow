@@ -13,6 +13,10 @@ node_modules/
 apps/web/.next/
 apps/web/next-env.d.ts
 apps/web/*.tsbuildinfo
+apps/web/.test-build/
+apps/web/.e2e-storage/
+apps/web/test-results/
+apps/web/playwright-report/
 
 # Environments / editors
 .env
@@ -27,4 +31,5 @@ Thumbs.db
 # Runtime output (MVP storage layout lives in /tmp/reflow)
 /tmp/
 output/
+.local-data/
 *.epub

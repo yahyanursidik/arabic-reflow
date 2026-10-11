@@ -16,6 +16,7 @@ from engine.extraction.models import RawBlock, RawDocument, RawImage, RawLine, R
 def extract_page(page: pymupdf.Page, page_number: int) -> RawPage:
     rect = page.rect
     blocks: list[RawBlock] = []
+    inline_images = []
 
     for block in page.get_text("dict")["blocks"]:
         if block.get("type") == 0:
@@ -44,6 +45,8 @@ def extract_page(page: pymupdf.Page, page_number: int) -> RawPage:
                     lines=lines,
                 )
             )
+        elif block.get("type") == 1 and block.get("image"):
+            inline_images.append(block)
 
     images = [
         RawImage(
@@ -54,6 +57,30 @@ def extract_page(page: pymupdf.Page, page_number: int) -> RawPage:
         )
         for info in page.get_image_info(xrefs=True)
     ]
+
+    # Inline PDF images have xref=0 and cannot be passed to extract_image().
+    # get_text('dict') already exposes their encoded payloads. Match each
+    # occurrence by geometry/dimensions, consuming it once rather than making
+    # a resource with no bytes (which produces broken EPUB image links).
+    for image in images:
+        if image.xref:
+            continue
+        candidates = [
+            (sum(abs(a - b) for a, b in zip(block["bbox"], image.bbox)), index)
+            for index, block in enumerate(inline_images)
+            if (
+                int(block.get("width", 0)) == image.width
+                and int(block.get("height", 0)) == image.height
+                # Some PDFs report image_info bounds rounded outwards to
+                # whole points while dict bounds retain the transform floats.
+                and all(abs(a - b) <= 1.01 for a, b in zip(block["bbox"], image.bbox))
+            )
+        ]
+        if candidates:
+            _, index = min(candidates)
+            block = inline_images.pop(index)
+            image.content = block["image"]
+            image.media_type = f"image/{block.get('ext', 'png')}".replace("jpg", "jpeg")
 
     return RawPage(
         page=page_number,

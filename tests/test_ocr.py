@@ -56,17 +56,18 @@ def test_unknown_engine_rejected() -> None:
         get_engine("nonexistent")
 
 
-def test_paddle_adapter_reports_missing_dependency() -> None:
-    # paddle is intentionally not installed in the test environment
-    if "paddle" in available_engines():
-        pytest.skip("paddle unexpectedly available")
+def test_paddle_adapter_reports_missing_dependency(monkeypatch) -> None:
+    import sys
+
+    monkeypatch.setitem(sys.modules, "paddleocr", None)
     with pytest.raises(OcrEngineUnavailable, match="ocr-paddle"):
         get_engine("paddle")
 
 
-def test_tesseract_adapter_reports_missing_dependency() -> None:
-    if "tesseract" in available_engines():
-        pytest.skip("tesseract unexpectedly available")
+def test_tesseract_adapter_reports_missing_dependency(monkeypatch) -> None:
+    import sys
+
+    monkeypatch.setitem(sys.modules, "pytesseract", None)
     with pytest.raises(OcrEngineUnavailable, match="ocr-tesseract"):
         get_engine("tesseract")
 
