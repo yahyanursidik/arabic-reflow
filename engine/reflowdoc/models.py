@@ -151,7 +151,19 @@ class SpanNode(BaseModel):
     arabic_integrity: ArabicIntegrity | None = None
 
 
-ContentNode = Annotated[Union[TextNode, SpanNode], Field(discriminator="type")]
+class InlineImageNode(BaseModel):
+    """A source glyph/word image that flows with a paragraph's text."""
+
+    type: Literal["inline_image"] = "inline_image"
+    resource_id: str
+    alt: str = ""
+
+    @property
+    def text(self) -> str:
+        return self.alt
+
+
+ContentNode = Annotated[Union[TextNode, SpanNode, InlineImageNode], Field(discriminator="type")]
 
 
 # --- Blocks -------------------------------------------------------------------
@@ -167,6 +179,9 @@ class BlockBase(BaseModel):
     dir: Direction | None = None
     confidence: float | None = Field(default=None, ge=0.0, le=1.0)
     warnings: list[str] = Field(default_factory=list)
+    footnote_refs: list[str] = Field(
+        default_factory=list, description="Explicitly verified note markers referenced by this block",
+    )
     modified_by_user: bool = Field(
         default=False,
         description="True only when a human explicitly edited the content",
@@ -220,12 +235,18 @@ class ImageBlock(BlockBase):
     resource_id: str
     alt: str | None = None
     caption_block_id: str | None = None
+    heading_level: int | None = Field(
+        default=None, ge=1, le=6,
+        description="Heading preserved as a source image; alt supplies its navigation label",
+    )
+    decorative: bool = Field(default=False, description="Printed page ornament; omit from reflow reading")
 
 
 class FootnoteBlock(BlockBase):
     type: Literal["footnote"] = "footnote"
     marker: str
     blocks: list["Block"] = Field(default_factory=list)
+    source_image_resource_id: str | None = Field(default=None, description="Optional original note image for comparison")
 
 
 class TableCell(BaseModel):

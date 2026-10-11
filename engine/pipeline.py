@@ -58,6 +58,7 @@ class ReconstructionResult:
     document: ReflowDocument
     layout: LayoutReport
     order: OrderReport
+    ocr: object | None = None
 
 
 def build_reflowdoc(
@@ -65,12 +66,15 @@ def build_reflowdoc(
     *,
     ocr_engine: "object | None" = None,  # engine.ocr.base.OcrEngine
     ocr_languages: list[str] | None = None,
+    force_ocr: bool = False,
 ) -> ReconstructionResult:
     """Run the full implemented pipeline: PDF/OCR in, ReflowDoc out.
 
     When an OCR engine is supplied, scanned pages and corrupted-Arabic pages
     go through the OCR stage (M5) with native-vs-OCR comparison.
     """
+    if force_ocr and ocr_engine is None:
+        raise ValueError("force_ocr requires an explicitly supplied OCR engine")
     profile = analyze(source)
     raw = extract(source)
 
@@ -78,7 +82,7 @@ def build_reflowdoc(
     if ocr_engine is not None:
         from engine.ocr.decision import apply_ocr
 
-        raw, ocr_report = apply_ocr(source, profile, raw, ocr_engine, ocr_languages)
+        raw, ocr_report = apply_ocr(source, profile, raw, ocr_engine, ocr_languages, force=force_ocr)
 
     raw, layout_report = detect_layout(raw)
     raw, order_report = reconstruct_reading_order(raw, profile, layout_report)
@@ -92,6 +96,15 @@ def build_reflowdoc(
 
     if ocr_report is not None:
         from engine.reflowdoc.models import ReflowWarning
+        from engine.reflowdoc.traversal import iter_blocks
+
+        for block in iter_blocks(document):
+            if block.source and block.source.page in ocr_report.selected_pages:
+                block.warnings.append("OCR_USED")
+                confidence = ocr_report.mean_confidence[block.source.page]
+                block.confidence = min(block.confidence if block.confidence is not None else 1.0, confidence)
+                if confidence < 0.7:
+                    block.warnings.append("OCR_LOW_CONFIDENCE")
 
         for code, message, page in ocr_report.warnings:
             document.warnings.append(
@@ -108,6 +121,7 @@ def build_reflowdoc(
         document=document,
         layout=layout_report,
         order=order_report,
+        ocr=ocr_report,
     )
 
 

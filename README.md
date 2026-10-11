@@ -1,5 +1,9 @@
 # Arabic Reflow
 
+<p><img src="apps/web/public/brand/arabic-reflow-logo.png" alt="Arabic Reflow logo" width="240" /></p>
+
+Current release: **v0.8.0**. See [release notes](CHANGELOG.md).
+
 **Open-source Arabic–Latin document reconstruction and EPUB engine.**
 
 Arabic Reflow helps convert complex PDFs containing **Arabic, Indonesian, and other Latin-script text** into clean, semantic, reflowable EPUB documents.
@@ -629,6 +633,13 @@ npm install
 npm run dev
 ```
 
+For the review workflow, resolved audit findings, known limitations, and web
+unit/browser tests, see [`docs/ui-review.md`](docs/ui-review.md).
+Engine additions, OCR setup, and Windows localhost startup are documented in
+[`docs/engine-features.md`](docs/engine-features.md). Run
+`powershell -ExecutionPolicy Bypass -File scripts/start-local.ps1` from the root
+to start the local API and web together (after installing dependencies).
+
 ### Docker
 
 ```bash
@@ -659,7 +670,7 @@ uvicorn apps.api.main:app --reload      # http://localhost:8000/docs
 
 ```bash
 curl -F "file=@book.pdf" localhost:8000/api/v1/documents
-curl -X POST localhost:8000/api/v1/documents/{id}/convert
+curl -X POST -H "Content-Type: application/json" -d '{"ocr": false}' localhost:8000/api/v1/documents/{id}/convert
 curl localhost:8000/api/v1/jobs/{job_id}
 curl -X POST localhost:8000/api/v1/documents/{id}/export/epub -o book.epub
 ```
@@ -673,7 +684,7 @@ contract (`docs/epub.md`), the OCR layer (`docs/ocr.md`), the HTTP API
 
 ```text
 engine/        processing engine (analyzer, extraction, arabic, reflowdoc, ...)
-apps/web/      Next.js review UI scaffold
+apps/web/      Next.js review workspace (source, preview, block editor, export)
 apps/api/      FastAPI service
 packages/      shared generated schemas (reflowdoc.schema.json)
 tests/         fixtures + golden records + snapshots

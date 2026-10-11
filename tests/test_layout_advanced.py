@@ -144,6 +144,8 @@ def test_fixture_image_embedded_in_epub(fixtures_dir) -> None:
     xhtml = next(n for n in archive.namelist() if n.endswith(".xhtml")
                  and "chapter" in n)
     html = archive.read(xhtml).decode("utf-8")
-    assert "<figure>" in html and "<img" in html
+    # Source figures now carry IDs for the inspection view's return link.
+    root = ElementTree.fromstring(html)
+    assert root.find(f'.//{{{XHTML_NS}}}figure/{{{XHTML_NS}}}img') is not None
     image_ref = images[0].split("resources/", 1)[1]
     assert f"resources/{image_ref}" in html

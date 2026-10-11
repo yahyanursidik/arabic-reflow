@@ -48,6 +48,10 @@ export type Direction = "ltr" | "rtl";
 export type Confidence = number | null;
 export type Warnings = string[];
 /**
+ * Explicitly verified note markers referenced by this block
+ */
+export type FootnoteRefs = string[];
+/**
  * True only when a human explicitly edited the content
  */
 export type ModifiedByUser = boolean;
@@ -70,6 +74,10 @@ export type Lang1 = string;
 export type Confidence1 = number | null;
 export type Warnings1 = string[];
 /**
+ * Explicitly verified note markers referenced by this block
+ */
+export type FootnoteRefs1 = string[];
+/**
  * True only when a human explicitly edited the content
  */
 export type ModifiedByUser1 = boolean;
@@ -77,7 +85,7 @@ export type Type1 = "paragraph";
 /**
  * @minItems 1
  */
-export type Content = [TextNode | SpanNode, ...(TextNode | SpanNode)[]];
+export type Content = [TextNode | SpanNode | InlineImageNode, ...(TextNode | SpanNode | InlineImageNode)[]];
 export type Type2 = "text";
 export type Text1 = string;
 /**
@@ -97,15 +105,22 @@ export type Lang2 = string;
 export type ScriptClass1 = "Arabic" | "Latin" | "Mixed" | "Numeric" | "Neutral";
 export type SourceText2 = string | null;
 export type Transformations2 = string[];
+export type Type4 = "inline_image";
+export type ResourceId = string;
+export type Alt = string;
 export type Id3 = string;
 export type Lang3 = string;
 export type Confidence2 = number | null;
 export type Warnings2 = string[];
 /**
+ * Explicitly verified note markers referenced by this block
+ */
+export type FootnoteRefs2 = string[];
+/**
  * True only when a human explicitly edited the content
  */
 export type ModifiedByUser2 = boolean;
-export type Type4 = "quote";
+export type Type5 = "quote";
 /**
  * e.g. 'arabic' for Arabic quote blocks
  */
@@ -118,42 +133,66 @@ export type Lang4 = string;
 export type Confidence3 = number | null;
 export type Warnings3 = string[];
 /**
+ * Explicitly verified note markers referenced by this block
+ */
+export type FootnoteRefs3 = string[];
+/**
  * True only when a human explicitly edited the content
  */
 export type ModifiedByUser3 = boolean;
-export type Type5 = "list";
+export type Type6 = "list";
 export type Ordered = boolean;
 export type Id5 = string;
 export type Lang5 = string;
 export type Confidence4 = number | null;
 export type Warnings4 = string[];
 /**
+ * Explicitly verified note markers referenced by this block
+ */
+export type FootnoteRefs4 = string[];
+/**
  * True only when a human explicitly edited the content
  */
 export type ModifiedByUser4 = boolean;
-export type Type6 = "image";
-export type ResourceId = string;
-export type Alt = string | null;
+export type Type7 = "image";
+export type ResourceId1 = string;
+export type Alt1 = string | null;
 export type CaptionBlockId = string | null;
+/**
+ * Heading preserved as a source image; alt supplies its navigation label
+ */
+export type HeadingLevel = number | null;
+/**
+ * Printed page ornament; omit from reflow reading
+ */
+export type Decorative = boolean;
 export type Id6 = string;
 export type Lang6 = string;
 export type Confidence5 = number | null;
 export type Warnings5 = string[];
 /**
+ * Explicitly verified note markers referenced by this block
+ */
+export type FootnoteRefs5 = string[];
+/**
  * True only when a human explicitly edited the content
  */
 export type ModifiedByUser5 = boolean;
-export type Type7 = "footnote";
+export type Type8 = "footnote";
 export type Marker = string;
 export type Id7 = string;
 export type Lang7 = string;
 export type Confidence6 = number | null;
 export type Warnings6 = string[];
 /**
+ * Explicitly verified note markers referenced by this block
+ */
+export type FootnoteRefs6 = string[];
+/**
  * True only when a human explicitly edited the content
  */
 export type ModifiedByUser6 = boolean;
-export type Type8 = "table";
+export type Type9 = "table";
 export type Text4 = string;
 export type Lang8 = string | null;
 export type Rows = TableCell[][];
@@ -163,13 +202,21 @@ export type Lang9 = string;
 export type Confidence7 = number | null;
 export type Warnings7 = string[];
 /**
+ * Explicitly verified note markers referenced by this block
+ */
+export type FootnoteRefs7 = string[];
+/**
  * True only when a human explicitly edited the content
  */
 export type ModifiedByUser7 = boolean;
-export type Type9 = "page_break";
+export type Type10 = "page_break";
 export type Blocks2 = (
   HeadingBlock | ParagraphBlock | QuoteBlock | ListBlock | ImageBlock | FootnoteBlock | TableBlock | PageBreakBlock
 )[];
+/**
+ * Optional original note image for comparison
+ */
+export type SourceImageResourceId = string | null;
 export type Blocks1 = (
   HeadingBlock | ParagraphBlock | QuoteBlock | ListBlock | ImageBlock | FootnoteBlock | TableBlock | PageBreakBlock
 )[];
@@ -236,6 +283,7 @@ export interface HeadingBlock {
   dir?: Direction | null;
   confidence?: Confidence;
   warnings?: Warnings;
+  footnote_refs?: FootnoteRefs;
   modified_by_user?: ModifiedByUser;
   /**
    * Arabic diagnostic metadata when the block carries Arabic
@@ -278,6 +326,7 @@ export interface ParagraphBlock {
   dir?: Direction | null;
   confidence?: Confidence1;
   warnings?: Warnings1;
+  footnote_refs?: FootnoteRefs1;
   modified_by_user?: ModifiedByUser1;
   /**
    * Arabic diagnostic metadata when the block carries Arabic
@@ -311,6 +360,15 @@ export interface SpanNode {
   arabic_integrity?: ArabicIntegrity | null;
   [k: string]: unknown;
 }
+/**
+ * A source glyph/word image that flows with a paragraph's text.
+ */
+export interface InlineImageNode {
+  type?: Type4;
+  resource_id: ResourceId;
+  alt?: Alt;
+  [k: string]: unknown;
+}
 export interface QuoteBlock {
   id: Id3;
   source?: SourceRef | null;
@@ -319,12 +377,13 @@ export interface QuoteBlock {
   dir?: Direction | null;
   confidence?: Confidence2;
   warnings?: Warnings2;
+  footnote_refs?: FootnoteRefs2;
   modified_by_user?: ModifiedByUser2;
   /**
    * Arabic diagnostic metadata when the block carries Arabic
    */
   arabic_integrity?: ArabicIntegrity | null;
-  type?: Type4;
+  type?: Type5;
   subtype?: Subtype;
   text: Text3;
   source_text?: SourceText3;
@@ -339,12 +398,13 @@ export interface ListBlock {
   dir?: Direction | null;
   confidence?: Confidence3;
   warnings?: Warnings3;
+  footnote_refs?: FootnoteRefs3;
   modified_by_user?: ModifiedByUser3;
   /**
    * Arabic diagnostic metadata when the block carries Arabic
    */
   arabic_integrity?: ArabicIntegrity | null;
-  type?: Type5;
+  type?: Type6;
   ordered?: Ordered;
   items?: Items;
   [k: string]: unknown;
@@ -361,15 +421,18 @@ export interface ImageBlock {
   dir?: Direction | null;
   confidence?: Confidence4;
   warnings?: Warnings4;
+  footnote_refs?: FootnoteRefs4;
   modified_by_user?: ModifiedByUser4;
   /**
    * Arabic diagnostic metadata when the block carries Arabic
    */
   arabic_integrity?: ArabicIntegrity | null;
-  type?: Type6;
-  resource_id: ResourceId;
-  alt?: Alt;
+  type?: Type7;
+  resource_id: ResourceId1;
+  alt?: Alt1;
   caption_block_id?: CaptionBlockId;
+  heading_level?: HeadingLevel;
+  decorative?: Decorative;
   [k: string]: unknown;
 }
 export interface FootnoteBlock {
@@ -380,14 +443,16 @@ export interface FootnoteBlock {
   dir?: Direction | null;
   confidence?: Confidence5;
   warnings?: Warnings5;
+  footnote_refs?: FootnoteRefs5;
   modified_by_user?: ModifiedByUser5;
   /**
    * Arabic diagnostic metadata when the block carries Arabic
    */
   arabic_integrity?: ArabicIntegrity | null;
-  type?: Type7;
+  type?: Type8;
   marker: Marker;
   blocks?: Blocks2;
+  source_image_resource_id?: SourceImageResourceId;
   [k: string]: unknown;
 }
 export interface TableBlock {
@@ -398,12 +463,13 @@ export interface TableBlock {
   dir?: Direction | null;
   confidence?: Confidence6;
   warnings?: Warnings6;
+  footnote_refs?: FootnoteRefs6;
   modified_by_user?: ModifiedByUser6;
   /**
    * Arabic diagnostic metadata when the block carries Arabic
    */
   arabic_integrity?: ArabicIntegrity | null;
-  type?: Type8;
+  type?: Type9;
   rows?: Rows;
   fallback_resource_id?: FallbackResourceId;
   [k: string]: unknown;
@@ -422,12 +488,13 @@ export interface PageBreakBlock {
   dir?: Direction | null;
   confidence?: Confidence7;
   warnings?: Warnings7;
+  footnote_refs?: FootnoteRefs7;
   modified_by_user?: ModifiedByUser7;
   /**
    * Arabic diagnostic metadata when the block carries Arabic
    */
   arabic_integrity?: ArabicIntegrity | null;
-  type?: Type9;
+  type?: Type10;
   [k: string]: unknown;
 }
 /**

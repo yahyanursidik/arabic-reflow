@@ -11,12 +11,12 @@ from engine.arabic.detector import ScriptClass
 from engine.arabic.integrity import LEVEL_PROBLEM, inspect_text, level_of
 from engine.arabic.unicode import is_arabic_letter
 from engine.reflowdoc.models import (
-    Chapter,
     ParagraphBlock,
     ReflowDocument,
     ReflowWarning,
     SpanNode,
 )
+from engine.reflowdoc.traversal import iter_blocks
 
 WARN_LOW_ARABIC_CONFIDENCE = "LOW_ARABIC_CONFIDENCE"
 
@@ -24,6 +24,8 @@ WARN_LOW_ARABIC_CONFIDENCE = "LOW_ARABIC_CONFIDENCE"
 def _block_text(block) -> str:
     if isinstance(block, ParagraphBlock):
         return block.text
+    if getattr(block, "type", None) == "table":
+        return "\n".join(cell.text for row in block.rows for cell in row)
     text = getattr(block, "text", None)
     return text if isinstance(text, str) else ""
 
@@ -61,16 +63,18 @@ def inspect_block(block) -> tuple[object | None, list[str]]:
 def attach_integrity(document: ReflowDocument) -> ReflowDocument:
     """Annotate blocks and collect document-level warnings (in place)."""
     low_confidence_blocks: list[str] = []
+    document.warnings = [w for w in document.warnings if w.code != WARN_LOW_ARABIC_CONFIDENCE]
 
-    for chapter in document.chapters:
-        for block in chapter.blocks:
-            integrity, issues = inspect_block(block)
-            if integrity is None:
-                continue
-            block.arabic_integrity = integrity
-            if level_of(integrity.score) == LEVEL_PROBLEM:
-                block.warnings.append(WARN_LOW_ARABIC_CONFIDENCE)
-                low_confidence_blocks.append(block.id)
+    for block in iter_blocks(document):
+        block.warnings = [w for w in block.warnings if w != WARN_LOW_ARABIC_CONFIDENCE]
+        block.arabic_integrity = None
+        integrity, issues = inspect_block(block)
+        if integrity is None:
+            continue
+        block.arabic_integrity = integrity
+        if level_of(integrity.score) == LEVEL_PROBLEM:
+            block.warnings.append(WARN_LOW_ARABIC_CONFIDENCE)
+            low_confidence_blocks.append(block.id)
 
     if low_confidence_blocks:
         document.warnings.append(
@@ -90,13 +94,12 @@ def attach_integrity(document: ReflowDocument) -> ReflowDocument:
 def document_report(document: ReflowDocument) -> dict:
     """Aggregated health summary: document score, per-page rollup, issues."""
     blocks: list[tuple[str, int | None, float, list[str]]] = []
-    for chapter in document.chapters:
-        for block in chapter.blocks:
-            integrity, issues = inspect_block(block)
-            if integrity is None:
-                continue
-            page = block.source.page if block.source else None
-            blocks.append((block.id, page, integrity.score, issues))
+    for block in iter_blocks(document):
+        integrity, issues = inspect_block(block)
+        if integrity is None:
+            continue
+        page = block.source.page if block.source else None
+        blocks.append((block.id, page, integrity.score, issues))
 
     score = (
         round(sum(b[2] for b in blocks) / len(blocks), 3) if blocks else None

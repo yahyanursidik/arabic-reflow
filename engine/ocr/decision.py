@@ -39,6 +39,7 @@ class PageDecision:
 class OcrReport:
     decisions: list[PageDecision] = field(default_factory=list)
     ocr_pages: list[int] = field(default_factory=list)
+    selected_pages: list[int] = field(default_factory=list)
     replaced: dict[int, str] = field(default_factory=dict)  # page -> reason
     rejected_candidates: dict[int, OcrPage] = field(default_factory=dict)
     mean_confidence: dict[int, float] = field(default_factory=dict)
@@ -47,7 +48,7 @@ class OcrReport:
     def warnings(self) -> list[tuple[str, str, int | None]]:
         """(code, message, page) tuples for the document warning list."""
         result: list[tuple[str, str, int | None]] = []
-        for page in self.ocr_pages:
+        for page in self.selected_pages:
             result.append((WARN_OCR_USED, f"Page {page} was recognized via OCR.", page))
         for page, confidence in self.mean_confidence.items():
             if confidence < MIN_OCR_MEAN_CONFIDENCE:
@@ -69,17 +70,22 @@ class OcrReport:
         return result
 
 
-def decide_pages(profile: DocumentProfile, raw: RawDocument) -> list[PageDecision]:
+def decide_pages(profile: DocumentProfile, raw: RawDocument, *, force: bool = False) -> list[PageDecision]:
     """Decide per page whether OCR is warranted (M5-04)."""
     decisions: list[PageDecision] = []
     profile_pages = {p.page: p for p in profile.pages}
     for page in raw.pages:
         signals = profile_pages.get(page.page)
         text_chars = sum(len(b.text) for b in page.blocks)
-        if signals is not None and signals.scanned_like:
+        arabic_score = _arabic_integrity_score(page.text)
+        if force:
+            decisions.append(PageDecision(page.page, True, "user_forced"))
+        elif signals is not None and signals.scanned_like:
             decisions.append(PageDecision(page.page, True, "no_text_layer"))
         elif text_chars < 20:
             decisions.append(PageDecision(page.page, True, "no_text_layer"))
+        elif arabic_score is not None and level_of(arabic_score) == LEVEL_PROBLEM:
+            decisions.append(PageDecision(page.page, True, "low_arabic_confidence"))
         else:
             decisions.append(PageDecision(page.page, False, "healthy_native"))
     return decisions
@@ -189,10 +195,11 @@ def apply_ocr(
     raw: RawDocument,
     engine: OcrEngine,
     languages: list[str] | None = None,
+    *, force: bool = False,
 ) -> tuple[RawDocument, OcrReport]:
     """Run the OCR stage over a raw document (M5-04/05/06)."""
     report = OcrReport()
-    report.decisions = decide_pages(profile, raw)
+    report.decisions = decide_pages(profile, raw, force=force)
 
     new_pages: list[RawPage] = []
     for page, decision in zip(raw.pages, report.decisions):
@@ -204,15 +211,23 @@ def apply_ocr(
         report.mean_confidence[page.page] = round(ocr_page.mean_confidence, 3)
 
         native_text = "\n".join(b.text for b in page.blocks)
-        if native_text.strip():
+        if force or decision.reason == "no_text_layer":
+            report.replaced[page.page] = "user_forced"
+            if not force:
+                report.replaced.pop(page.page, None)
+            report.selected_pages.append(page.page)
+            new_pages.append(ocr_raw)
+        elif native_text.strip():
             chosen, reason = prefer_candidate(page, ocr_page, ocr_raw)
             report.rejected_candidates[page.page] = ocr_page
             if chosen is ocr_raw:
                 report.replaced[page.page] = reason
+                report.selected_pages.append(page.page)
                 new_pages.append(ocr_raw)
             else:
                 new_pages.append(page)
         else:
+            report.selected_pages.append(page.page)
             new_pages.append(ocr_raw)
 
     updated = raw.model_copy(update={"pages": new_pages})

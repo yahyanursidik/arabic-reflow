@@ -280,6 +280,14 @@
           "title": "Warnings",
           "type": "array"
         },
+        "footnote_refs": {
+          "description": "Explicitly verified note markers referenced by this block",
+          "items": {
+            "type": "string"
+          },
+          "title": "Footnote Refs",
+          "type": "array"
+        },
         "modified_by_user": {
           "default": false,
           "description": "True only when a human explicitly edited the content",
@@ -352,6 +360,19 @@
           },
           "title": "Blocks",
           "type": "array"
+        },
+        "source_image_resource_id": {
+          "anyOf": [
+            {
+              "type": "string"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Optional original note image for comparison",
+          "title": "Source Image Resource Id"
         }
       },
       "required": [
@@ -424,6 +445,14 @@
             "type": "string"
           },
           "title": "Warnings",
+          "type": "array"
+        },
+        "footnote_refs": {
+          "description": "Explicitly verified note markers referenced by this block",
+          "items": {
+            "type": "string"
+          },
+          "title": "Footnote Refs",
           "type": "array"
         },
         "modified_by_user": {
@@ -553,6 +582,14 @@
           "title": "Warnings",
           "type": "array"
         },
+        "footnote_refs": {
+          "description": "Explicitly verified note markers referenced by this block",
+          "items": {
+            "type": "string"
+          },
+          "title": "Footnote Refs",
+          "type": "array"
+        },
         "modified_by_user": {
           "default": false,
           "description": "True only when a human explicitly edited the content",
@@ -604,6 +641,27 @@
           ],
           "default": null,
           "title": "Caption Block Id"
+        },
+        "heading_level": {
+          "anyOf": [
+            {
+              "maximum": 6,
+              "minimum": 1,
+              "type": "integer"
+            },
+            {
+              "type": "null"
+            }
+          ],
+          "default": null,
+          "description": "Heading preserved as a source image; alt supplies its navigation label",
+          "title": "Heading Level"
+        },
+        "decorative": {
+          "default": false,
+          "description": "Printed page ornament; omit from reflow reading",
+          "title": "Decorative",
+          "type": "boolean"
         }
       },
       "required": [
@@ -611,6 +669,31 @@
         "resource_id"
       ],
       "title": "ImageBlock",
+      "type": "object"
+    },
+    "InlineImageNode": {
+      "description": "A source glyph/word image that flows with a paragraph's text.",
+      "properties": {
+        "type": {
+          "const": "inline_image",
+          "default": "inline_image",
+          "title": "Type",
+          "type": "string"
+        },
+        "resource_id": {
+          "title": "Resource Id",
+          "type": "string"
+        },
+        "alt": {
+          "default": "",
+          "title": "Alt",
+          "type": "string"
+        }
+      },
+      "required": [
+        "resource_id"
+      ],
+      "title": "InlineImageNode",
       "type": "object"
     },
     "ListBlock": {
@@ -676,6 +759,14 @@
             "type": "string"
           },
           "title": "Warnings",
+          "type": "array"
+        },
+        "footnote_refs": {
+          "description": "Explicitly verified note markers referenced by this block",
+          "items": {
+            "type": "string"
+          },
+          "title": "Footnote Refs",
           "type": "array"
         },
         "modified_by_user": {
@@ -837,6 +928,14 @@
           "title": "Warnings",
           "type": "array"
         },
+        "footnote_refs": {
+          "description": "Explicitly verified note markers referenced by this block",
+          "items": {
+            "type": "string"
+          },
+          "title": "Footnote Refs",
+          "type": "array"
+        },
         "modified_by_user": {
           "default": false,
           "description": "True only when a human explicitly edited the content",
@@ -933,6 +1032,14 @@
           "title": "Warnings",
           "type": "array"
         },
+        "footnote_refs": {
+          "description": "Explicitly verified note markers referenced by this block",
+          "items": {
+            "type": "string"
+          },
+          "title": "Footnote Refs",
+          "type": "array"
+        },
         "modified_by_user": {
           "default": false,
           "description": "True only when a human explicitly edited the content",
@@ -961,6 +1068,7 @@
           "items": {
             "discriminator": {
               "mapping": {
+                "inline_image": "#/$defs/InlineImageNode",
                 "span": "#/$defs/SpanNode",
                 "text": "#/$defs/TextNode"
               },
@@ -972,6 +1080,9 @@
               },
               {
                 "$ref": "#/$defs/SpanNode"
+              },
+              {
+                "$ref": "#/$defs/InlineImageNode"
               }
             ]
           },
@@ -1050,6 +1161,14 @@
             "type": "string"
           },
           "title": "Warnings",
+          "type": "array"
+        },
+        "footnote_refs": {
+          "description": "Explicitly verified note markers referenced by this block",
+          "items": {
+            "type": "string"
+          },
+          "title": "Footnote Refs",
           "type": "array"
         },
         "modified_by_user": {
@@ -1418,6 +1537,14 @@
             "type": "string"
           },
           "title": "Warnings",
+          "type": "array"
+        },
+        "footnote_refs": {
+          "description": "Explicitly verified note markers referenced by this block",
+          "items": {
+            "type": "string"
+          },
+          "title": "Footnote Refs",
           "type": "array"
         },
         "modified_by_user": {

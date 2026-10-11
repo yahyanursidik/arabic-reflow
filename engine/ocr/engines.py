@@ -36,17 +36,10 @@ def get_engine(name: str, **kwargs) -> OcrEngine:
 
 
 def available_engines() -> list[str]:
-    """Engines whose dependencies are actually importable."""
-    result = []
-    for name, cls in sorted(_REGISTRY.items()):
-        try:
-            cls()
-        except OcrEngineUnavailable:
-            continue
-        except Exception:
-            continue
-        result.append(name)
-    return result
+    """Installed runtimes, without initializing/downloading heavy OCR models."""
+    from engine.ocr.runtime import ocr_capabilities
+
+    return [item["name"] for item in ocr_capabilities()["engines"] if item["available"]]
 
 
 @register("paddle")
@@ -63,23 +56,44 @@ class PaddleOcrEngine:
                 "PaddleOCR is not installed; install with: pip install \".[ocr-paddle]\""
             ) from exc
         self._languages = languages or ["ar", "id", "en"]
-        self._ocr = PaddleOCR(use_angle_cls=True, lang="ar", show_log=False)
+        # PaddleOCR v3 changed initialization and recognition APIs. Supporting
+        # both avoids the old v2-only arguments breaking the declared v3 extra.
+        from importlib.metadata import version
+
+        self._v3 = int(version("paddleocr").split(".")[0]) >= 3
+        if self._v3:
+            self._ocr = PaddleOCR(lang="ar", use_doc_orientation_classify=False, use_doc_unwarping=False, use_textline_orientation=True)
+        else:
+            self._ocr = PaddleOCR(use_angle_cls=True, lang="ar", show_log=False)
 
     def recognize(self, image: bytes, languages: list[str] | None = None) -> "OcrPage":
         import numpy
-        from paddleocr import PaddleOCR as _Engine  # noqa: F401
+        import pymupdf
 
         from engine.ocr.base import OcrBox, OcrLine, OcrPage, png_size
 
-        pixmap = numpy.frombuffer(image, dtype=numpy.uint8)
-        # PaddleOCR accepts image arrays via its own reader; hand it the raw
-        # bytes path through its tooling to stay version-tolerant.
-        result = self._ocr.ocr(image, cls=True)
+        pix = pymupdf.Pixmap(image)
+        if pix.colorspace and pix.colorspace.n != 3:
+            pix = pymupdf.Pixmap(pymupdf.csRGB, pix)
+        pixels = numpy.frombuffer(pix.samples, dtype=numpy.uint8).reshape(pix.height, pix.width, pix.n)
+        pixels = pixels[:, :, :3][:, :, ::-1].copy()  # RGB -> BGR image array
+        result = list(self._ocr.predict(pixels)) if self._v3 else self._ocr.ocr(pixels, cls=True)
         width, height = png_size(image)
 
         lines: list[OcrLine] = []
         confidences: list[float] = []
-        page_result = result[0] if result else []
+        if self._v3:
+            entries = []
+            for page_result in result:
+                record = page_result.get("res", page_result)
+                texts = record.get("rec_texts", [])
+                scores = record.get("rec_scores", [])
+                boxes = record.get("rec_polys", [])
+                for box, text, score in zip(boxes, texts, scores):
+                    entries.append((box, (text, score)))
+            page_result = entries
+        else:
+            page_result = result[0] if result else []
         for entry in page_result or []:
             box_points, (text, confidence) = entry[0], entry[1]
             xs = [p[0] for p in box_points]
@@ -119,11 +133,14 @@ class TesseractOcrEngine:
                 "pytesseract is not installed; install with: pip install \".[ocr-tesseract]\" "
                 "and ensure the tesseract binary (with ara/ind language data) is on PATH"
             ) from exc
-        tesseract_cmd = os.environ.get("TESSERACT_CMD")
-        if tesseract_cmd:
-            pytesseract.pytesseract.tesseract_cmd = tesseract_cmd
+        from engine.ocr.runtime import language_codes, tesseract_command, tesseract_status
+
+        status = tesseract_status(languages)
+        if not status["available"]:
+            raise OcrEngineUnavailable(status["message"])
+        pytesseract.pytesseract.tesseract_cmd = tesseract_command()
         # pytesseract expects the language pack list as one '+'-joined string.
-        self._languages = "+".join(languages) if languages else "ara+ind+eng"
+        self._languages = "+".join(language_codes(languages))
 
     def recognize(self, image: bytes, languages: list[str] | None = None) -> "OcrPage":
         import io
@@ -135,10 +152,12 @@ class TesseractOcrEngine:
 
         pil = Image.open(io.BytesIO(image))
         width, height = png_size(image)
-        lang = "+".join(languages) if languages else self._languages
+        from engine.ocr.runtime import language_codes
+
+        lang = "+".join(language_codes(languages)) if languages else self._languages
 
         data = pytesseract.image_to_data(
-            pil, lang=lang, output_type=pytesseract.Output.DICT
+            pil, lang=lang, output_type=pytesseract.Output.DICT, timeout=120
         )
         lines: list[OcrLine] = []
         confidences: list[float] = []
